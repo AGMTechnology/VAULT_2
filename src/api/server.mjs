@@ -17,16 +17,32 @@ const staticUiRoutes = {
     filePath: path.join(uiDir, "memory-hub.html"),
     contentType: "text/html; charset=utf-8",
   },
+  "/memory-insights": {
+    filePath: path.join(uiDir, "memory-insights.html"),
+    contentType: "text/html; charset=utf-8",
+  },
   "/ui/memory-hub.css": {
     filePath: path.join(uiDir, "memory-hub.css"),
+    contentType: "text/css; charset=utf-8",
+  },
+  "/ui/memory-insights.css": {
+    filePath: path.join(uiDir, "memory-insights.css"),
     contentType: "text/css; charset=utf-8",
   },
   "/ui/memory-hub.js": {
     filePath: path.join(uiDir, "memory-hub.js"),
     contentType: "application/javascript; charset=utf-8",
   },
+  "/ui/memory-insights.js": {
+    filePath: path.join(uiDir, "memory-insights.js"),
+    contentType: "application/javascript; charset=utf-8",
+  },
   "/ui/memory-hub-model.mjs": {
     filePath: path.join(uiDir, "memory-hub-model.mjs"),
+    contentType: "application/javascript; charset=utf-8",
+  },
+  "/ui/memory-insights-model.mjs": {
+    filePath: path.join(uiDir, "memory-insights-model.mjs"),
     contentType: "application/javascript; charset=utf-8",
   },
 };

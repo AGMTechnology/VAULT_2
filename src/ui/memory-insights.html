@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VAULT_2 Memory Insights</title>
+    <link rel="stylesheet" href="/ui/memory-hub.css" />
+    <link rel="stylesheet" href="/ui/memory-insights.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="memory-insights-root">
+      <aside class="sidebar">
+        <div class="brand-row">
+          <div class="brand-badge">V</div>
+          <div class="brand-title">VAULT_2</div>
+        </div>
+        <div class="project-chip">Memory Insights</div>
+        <div class="sprint-line">
+          <span class="sprint-label">Sprint 12</span>
+          <div class="progress-rail">
+            <span class="progress-segment todo"></span>
+            <span class="progress-segment progress"></span>
+            <span class="progress-segment review"></span>
+            <span class="progress-segment done"></span>
+          </div>
+        </div>
+        <nav class="nav-block">
+          <div class="nav-section-title">Planning</div>
+          <a class="nav-item" href="/memory-hub">Memory Hub</a>
+          <a class="nav-item nav-item-active" href="/memory-insights">Insights</a>
+          <button class="nav-item" type="button">Audit</button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="content-header">
+          <div>
+            <p class="project-path">Project Alpha / <strong>Memory Insights</strong></p>
+            <h1>Memory Insights</h1>
+          </div>
+          <div class="header-actions">
+            <a class="ghost-action" href="/memory-hub">Open Memory Hub</a>
+            <button class="primary-action" id="refresh-button" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="toolbar insights-toolbar">
+          <label class="field">
+            <span>Feature</span>
+            <select id="filter-feature"></select>
+          </label>
+          <label class="field">
+            <span>Task</span>
+            <select id="filter-task"></select>
+          </label>
+        </section>
+
+        <section id="insights-state-message" class="state-banner"></section>
+
+        <section class="insights-grid">
+          <article class="panel">
+            <div class="panel-title-row">
+              <h2>Top Lessons</h2>
+              <p id="top-lessons-count">0</p>
+            </div>
+            <div id="top-lessons-list" class="insights-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-title-row">
+              <h2>Recurring Errors</h2>
+              <p id="recurring-errors-count">0</p>
+            </div>
+            <div id="recurring-errors-list" class="insights-list"></div>
+          </article>
+        </section>
+
+        <section class="panel decisions-panel">
+          <div class="panel-title-row">
+            <h2>Frequent Decisions</h2>
+            <p id="frequent-decisions-count">0</p>
+          </div>
+          <div id="frequent-decisions-list" class="insights-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/ui/memory-insights.js"></script>
+  </body>
+</html>

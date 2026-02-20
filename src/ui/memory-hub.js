@@ -8,12 +8,13 @@ import {
 
 const params = new URLSearchParams(window.location.search);
 const projectId = params.get("projectId") || "vault-2";
+const initialEntryId = params.get("entryId") || "";
 
 const state = {
   loading: true,
   error: "",
   entries: [],
-  selectedId: "",
+  selectedId: initialEntryId,
   filters: {
     query: "",
     featureScope: "",
@@ -50,7 +51,7 @@ function truncate(value, max = 110) {
   if (value.length <= max) {
     return value;
   }
-  return `${value.slice(0, max - 1)}…`;
+  return `${value.slice(0, max - 3)}...`;
 }
 
 function formatDate(value) {

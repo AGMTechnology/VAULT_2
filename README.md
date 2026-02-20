@@ -27,6 +27,7 @@ Memory-first platform for contextual AI memory orchestration.
 ## Commands
 - npm test
 - npm run start:api then open `http://127.0.0.1:3022/memory-hub`
+- open `http://127.0.0.1:3022/memory-insights` for insights view
 
 ## Memory API v1
 - Start server: `npm run start:api`
@@ -35,6 +36,7 @@ Memory-first platform for contextual AI memory orchestration.
   - `GET /api/memory` list and filter entries
   - `POST /api/memory/retrieve` contextual ranking with score/reasons/source refs
   - `GET /memory-hub` Memory Hub UI (list, filters, detail, UI states)
+  - `GET /memory-insights` Memory Insights UI (top lessons, recurring errors, frequent decisions)
   - `POST /api/compose/ticket` enrich ticket draft with contextual memory
   - `POST /api/compose/handoff` enrich handoff markdown with contextual memory
   - `POST /api/compose/reference-prompt` enrich reference prompt with contextual memory
