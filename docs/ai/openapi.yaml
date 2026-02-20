@@ -1,0 +1,681 @@
+openapi: 3.1.0
+info:
+  title: VAULT_2 Memory API
+  version: 1.0.0
+  description: |
+    Contract for VAULT_2 memory operations:
+    append/list, contextual retrieval, composition injection, and workflow audit hooks.
+servers:
+  - url: http://127.0.0.1:3022
+paths:
+  /api/memory:
+    get:
+      summary: List memory entries with contextual filters
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: featureScope
+          schema:
+            type: string
+        - in: query
+          name: taskType
+          schema:
+            $ref: "#/components/schemas/TaskType"
+        - in: query
+          name: agentId
+          schema:
+            type: string
+        - in: query
+          name: lessonCategory
+          schema:
+            $ref: "#/components/schemas/LessonCategory"
+        - in: query
+          name: label
+          schema:
+            type: string
+        - in: query
+          name: searchQuery
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Memory entries filtered by context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Append one memory entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostMemoryRequest"
+      responses:
+        "201":
+          description: Memory entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostMemoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/memory/retrieve:
+    post:
+      summary: Retrieve top memory entries by contextual score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrieveMemoryRequest"
+      responses:
+        "200":
+          description: Ranked memory entries with score and reasons
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetrieveMemoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/compose/ticket:
+    post:
+      summary: Compose ticket content enriched with contextual memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComposeTicketRequest"
+      responses:
+        "200":
+          description: Enriched ticket fields and memory trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComposeTicketResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/compose/handoff:
+    post:
+      summary: Compose memory-enriched handoff markdown
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComposeHandoffRequest"
+      responses:
+        "200":
+          description: Handoff markdown and memory trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComposeHandoffResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/compose/reference-prompt:
+    post:
+      summary: Compose memory-enriched reference prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComposeReferencePromptRequest"
+      responses:
+        "200":
+          description: Reference prompt and memory trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComposeReferencePromptResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/workflow/ticket-finish:
+    post:
+      summary: Append memory and audit a ticket completion transition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowTicketFinishRequest"
+      responses:
+        "201":
+          description: Memory entry and workflow audit created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowTicketFinishResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/workflow/audit:
+    get:
+      summary: List workflow memory push audit entries
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: ticketId
+          schema:
+            type: string
+        - in: query
+          name: agentId
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Audit list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowAuditListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  responses:
+    BadRequest:
+      description: Validation or malformed payload/query error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Project or resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Duplicate key or conflicting state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    TaskType:
+      type: string
+      enum: [dev, design, qa, pm, other]
+
+    LessonCategory:
+      type: string
+      enum: [success, error, decision, constraint]
+
+    Priority:
+      type: string
+      enum: [P0, P1, P2, P3]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+
+    MemoryEntry:
+      type: object
+      required:
+        - id
+        - projectId
+        - featureScope
+        - taskType
+        - agentId
+        - lessonCategory
+        - content
+        - sourceRefs
+        - labels
+        - createdAt
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        agentId:
+          type: string
+        lessonCategory:
+          $ref: "#/components/schemas/LessonCategory"
+        content:
+          type: string
+        sourceRefs:
+          type: array
+          items:
+            type: string
+        labels:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    MemoryListResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryEntry"
+
+    PostMemoryRequest:
+      type: object
+      required:
+        - projectId
+        - featureScope
+        - taskType
+        - agentId
+        - lessonCategory
+        - content
+        - sourceRefs
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        agentId:
+          type: string
+        lessonCategory:
+          $ref: "#/components/schemas/LessonCategory"
+        content:
+          type: string
+        sourceRefs:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        labels:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PostMemoryResponse:
+      type: object
+      required: [entry]
+      properties:
+        entry:
+          $ref: "#/components/schemas/MemoryEntry"
+
+    RetrieveMemoryRequest:
+      type: object
+      required: [projectId]
+      properties:
+        projectId:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        priority:
+          $ref: "#/components/schemas/Priority"
+        labels:
+          type: array
+          items:
+            type: string
+        searchQuery:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+
+    RankedMemoryEntry:
+      allOf:
+        - $ref: "#/components/schemas/MemoryEntry"
+        - type: object
+          required: [score, reasons]
+          properties:
+            score:
+              type: integer
+            reasons:
+              type: array
+              items:
+                type: string
+
+    RetrieveMemoryResponse:
+      type: object
+      required: [entries, meta]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/RankedMemoryEntry"
+        meta:
+          type: object
+          required: [fallbackUsed, totalCandidates, contextSignals]
+          properties:
+            fallbackUsed:
+              type: boolean
+            totalCandidates:
+              type: integer
+            contextSignals:
+              type: integer
+
+    MemoryTrace:
+      type: object
+      required: [sourceMemoryIds, fallbackUsed, contextSignals]
+      properties:
+        sourceMemoryIds:
+          type: array
+          items:
+            type: string
+        fallbackUsed:
+          type: boolean
+        contextSignals:
+          type: integer
+
+    ComposeTicketRequest:
+      type: object
+      required: [projectId, title]
+      properties:
+        projectId:
+          type: string
+        title:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        priority:
+          $ref: "#/components/schemas/Priority"
+        labels:
+          type: array
+          items:
+            type: string
+        searchQuery:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+        specMarkdown:
+          type: string
+        acceptanceCriteria:
+          type: string
+        testPlan:
+          type: string
+
+    ComposeTicketResponse:
+      type: object
+      required: [ticket, memoryTrace]
+      properties:
+        ticket:
+          type: object
+          required: [title, specMarkdown, acceptanceCriteria, testPlan, referencePrompt]
+          properties:
+            title:
+              type: string
+            specMarkdown:
+              type: string
+            acceptanceCriteria:
+              type: string
+            testPlan:
+              type: string
+            referencePrompt:
+              type: string
+        memoryTrace:
+          $ref: "#/components/schemas/MemoryTrace"
+
+    ComposeHandoffRequest:
+      type: object
+      required: [projectId, ticketId, summary]
+      properties:
+        projectId:
+          type: string
+        ticketId:
+          type: string
+        summary:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        priority:
+          $ref: "#/components/schemas/Priority"
+        labels:
+          type: array
+          items:
+            type: string
+        searchQuery:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+
+    ComposeHandoffResponse:
+      type: object
+      required: [handoffMarkdown, memoryTrace]
+      properties:
+        handoffMarkdown:
+          type: string
+        memoryTrace:
+          $ref: "#/components/schemas/MemoryTrace"
+
+    ComposeReferencePromptRequest:
+      type: object
+      required: [projectId, ticketId, title]
+      properties:
+        projectId:
+          type: string
+        ticketId:
+          type: string
+        title:
+          type: string
+        basePrompt:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        priority:
+          $ref: "#/components/schemas/Priority"
+        labels:
+          type: array
+          items:
+            type: string
+        searchQuery:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+
+    ComposeReferencePromptResponse:
+      type: object
+      required: [referencePrompt, memoryTrace]
+      properties:
+        referencePrompt:
+          type: string
+        memoryTrace:
+          $ref: "#/components/schemas/MemoryTrace"
+
+    WorkflowTicketFinishMemoryPayload:
+      type: object
+      required: [featureScope, taskType, lessonCategory, content, sourceRefs]
+      properties:
+        id:
+          type: string
+        featureScope:
+          type: string
+        taskType:
+          $ref: "#/components/schemas/TaskType"
+        lessonCategory:
+          $ref: "#/components/schemas/LessonCategory"
+        content:
+          type: string
+        sourceRefs:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        labels:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WorkflowTicketFinishRequest:
+      type: object
+      required: [projectId, ticketId, fromStatus, toStatus, agentId, memory]
+      properties:
+        projectId:
+          type: string
+        ticketId:
+          type: string
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+          enum: [in-review, done]
+        agentId:
+          type: string
+        memory:
+          $ref: "#/components/schemas/WorkflowTicketFinishMemoryPayload"
+
+    WorkflowAuditEntry:
+      type: object
+      required:
+        - id
+        - projectId
+        - ticketId
+        - fromStatus
+        - toStatus
+        - agentId
+        - memoryEntryId
+        - payload
+        - createdAt
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        ticketId:
+          type: string
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        agentId:
+          type: string
+        memoryEntryId:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    WorkflowTicketFinishResponse:
+      type: object
+      required: [memoryEntry, audit]
+      properties:
+        memoryEntry:
+          $ref: "#/components/schemas/MemoryEntry"
+        audit:
+          type: object
+          required:
+            - id
+            - projectId
+            - ticketId
+            - fromStatus
+            - toStatus
+            - agentId
+            - memoryEntryId
+            - createdAt
+          properties:
+            id:
+              type: string
+            projectId:
+              type: string
+            ticketId:
+              type: string
+            fromStatus:
+              type: string
+            toStatus:
+              type: string
+            agentId:
+              type: string
+            memoryEntryId:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+
+    WorkflowAuditListResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowAuditEntry"
