@@ -108,6 +108,42 @@ export async function startMemoryApiServer({
         return;
       }
 
+      if (url.pathname === "/api/compose/ticket") {
+        if (req.method !== "POST") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
+        const body = await readJson(req);
+        const result = api.composeTicket(body);
+        json(res, result.status, result.body);
+        return;
+      }
+
+      if (url.pathname === "/api/compose/handoff") {
+        if (req.method !== "POST") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
+        const body = await readJson(req);
+        const result = api.composeHandoff(body);
+        json(res, result.status, result.body);
+        return;
+      }
+
+      if (url.pathname === "/api/compose/reference-prompt") {
+        if (req.method !== "POST") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
+        const body = await readJson(req);
+        const result = api.composeReferencePrompt(body);
+        json(res, result.status, result.body);
+        return;
+      }
+
       if (url.pathname === "/api/workflow/audit") {
         if (req.method !== "GET") {
           json(res, 405, { error: "Method not allowed" });

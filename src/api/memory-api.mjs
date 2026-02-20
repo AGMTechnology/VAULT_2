@@ -387,6 +387,121 @@ function sortByCreatedDesc(a, b) {
 export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) {
   const normalizedRegistry = normalizeProjectRegistry(projectRegistry);
 
+  function runRetrieval(payload) {
+    const validated = validateRetrievePayload(payload);
+    if (!validated.ok) {
+      return {
+        status: 400,
+        body: {
+          error: "Invalid retrieval payload",
+          details: validated.errors,
+        },
+      };
+    }
+
+    const context = validated.value;
+
+    if (!hasProject(normalizedRegistry, context.projectId)) {
+      return {
+        status: 404,
+        body: { error: "Project not found" },
+      };
+    }
+
+    const candidates = queryMemoryEntries(db, {
+      projectId: context.projectId,
+      searchQuery: "",
+      limit: 1000,
+    });
+
+    if (candidates.length === 0) {
+      return {
+        status: 200,
+        body: {
+          entries: [],
+          meta: {
+            fallbackUsed: true,
+            totalCandidates: 0,
+            contextSignals: 0,
+          },
+        },
+      };
+    }
+
+    const contextSignals = [
+      context.featureScope,
+      context.taskType,
+      context.priority,
+      context.searchQuery,
+      context.labels.length > 0 ? "labels" : "",
+    ].filter(Boolean).length;
+
+    const scored = candidates.map((entry) => {
+      const result = scoreEntry(entry, context);
+      return {
+        ...entry,
+        labels: result.labels,
+        score: result.score,
+        reasons: result.reasons,
+      };
+    });
+
+    let fallbackUsed = false;
+    let ranked = scored.sort((a, b) => b.score - a.score || sortByCreatedDesc(a, b));
+
+    if (contextSignals === 0) {
+      fallbackUsed = true;
+      ranked = scored
+        .sort(sortByCreatedDesc)
+        .map((entry) => ({
+          ...entry,
+          reasons: unique([...entry.reasons, "fallback:latest-project-memory"]),
+        }));
+    } else if ((ranked[0]?.score ?? 0) < 20) {
+      fallbackUsed = true;
+      ranked = scored
+        .sort(sortByCreatedDesc)
+        .map((entry) => ({
+          ...entry,
+          reasons: unique([...entry.reasons, "fallback:low-context-match"]),
+        }));
+    }
+
+    return {
+      status: 200,
+      body: {
+        entries: ranked.slice(0, context.limit),
+        meta: {
+          fallbackUsed,
+          totalCandidates: candidates.length,
+          contextSignals,
+        },
+      },
+    };
+  }
+
+  function buildLessonsSection(entries) {
+    const sectionTitle = "## Lessons to avoid repeating mistakes";
+    if (entries.length === 0) {
+      return [
+        sectionTitle,
+        "- No contextual memory matched. Apply defensive defaults and push a new lesson when task is done.",
+      ].join("\n");
+    }
+
+    const lines = entries.map((entry) => {
+      const sourceRefs = entry.sourceRefs.filter((source) => !source.startsWith("label:"));
+      const sourcesText = sourceRefs.length > 0 ? sourceRefs.join(", ") : "none";
+      return `- [${entry.id}] ${entry.content} (score: ${entry.score}; sources: ${sourcesText})`;
+    });
+
+    return [sectionTitle, ...lines].join("\n");
+  }
+
+  function buildSourceMemoryIds(entries) {
+    return entries.map((entry) => entry.id);
+  }
+
   return {
     postMemory(payload) {
       const validated = validatePostPayload(payload);
@@ -484,92 +599,200 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
     },
 
     retrieveMemory(payload) {
-      const validated = validateRetrievePayload(payload);
-      if (!validated.ok) {
+      return runRetrieval(payload);
+    },
+
+    composeTicket(payload) {
+      const projectId = toTrimmedString(payload?.projectId);
+      const title = toTrimmedString(payload?.title);
+      const specMarkdown = toTrimmedString(payload?.specMarkdown);
+      const acceptanceCriteria = toTrimmedString(payload?.acceptanceCriteria);
+      const testPlan = toTrimmedString(payload?.testPlan);
+
+      if (!projectId) {
         return {
           status: 400,
-          body: {
-            error: "Invalid retrieval payload",
-            details: validated.errors,
-          },
+          body: { error: "projectId is required" },
         };
       }
-
-      const context = validated.value;
-
-      if (!hasProject(normalizedRegistry, context.projectId)) {
+      if (!title) {
         return {
-          status: 404,
-          body: { error: "Project not found" },
+          status: 400,
+          body: { error: "title is required" },
         };
       }
 
-      const candidates = queryMemoryEntries(db, {
-        projectId: context.projectId,
-        searchQuery: "",
-        limit: 1000,
+      const retrieval = runRetrieval({
+        projectId,
+        featureScope: payload?.featureScope,
+        taskType: payload?.taskType,
+        priority: payload?.priority,
+        labels: payload?.labels,
+        searchQuery: payload?.searchQuery,
+        limit: payload?.limit ?? 5,
       });
-
-      if (candidates.length === 0) {
-        return {
-          status: 200,
-          body: {
-            entries: [],
-            meta: {
-              fallbackUsed: true,
-              totalCandidates: 0,
-            },
-          },
-        };
+      if (retrieval.status !== 200) {
+        return retrieval;
       }
 
-      const contextSignals = [
-        context.featureScope,
-        context.taskType,
-        context.priority,
-        context.searchQuery,
-        context.labels.length > 0 ? "labels" : "",
-      ].filter(Boolean).length;
+      const entries = retrieval.body.entries;
+      const lessonsSection = buildLessonsSection(entries);
+      const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
+      const baseSpec = specMarkdown || "No initial specification provided.";
 
-      const scored = candidates.map((entry) => {
-        const result = scoreEntry(entry, context);
-        return {
-          ...entry,
-          labels: result.labels,
-          score: result.score,
-          reasons: result.reasons,
-        };
-      });
-
-      let fallbackUsed = false;
-      let ranked = scored.sort((a, b) => b.score - a.score || sortByCreatedDesc(a, b));
-
-      if (contextSignals === 0) {
-        fallbackUsed = true;
-        ranked = scored
-          .sort(sortByCreatedDesc)
-          .map((entry) => ({
-            ...entry,
-            reasons: unique([...entry.reasons, "fallback:latest-project-memory"]),
-          }));
-      } else if ((ranked[0]?.score ?? 0) < 20) {
-        fallbackUsed = true;
-        ranked = scored
-          .sort(sortByCreatedDesc)
-          .map((entry) => ({
-            ...entry,
-            reasons: unique([...entry.reasons, "fallback:low-context-match"]),
-          }));
-      }
+      const enrichedSpecMarkdown = [baseSpec, "", lessonsSection, "", memoryIdsLine].join("\n");
+      const referencePrompt = [
+        `You are assigned to ticket "${title}".`,
+        "",
+        lessonsSection,
+        "",
+        memoryIdsLine,
+      ].join("\n");
 
       return {
         status: 200,
         body: {
-          entries: ranked.slice(0, context.limit),
-          meta: {
-            fallbackUsed,
-            totalCandidates: candidates.length,
-            contextSignals,
+          ticket: {
+            title,
+            specMarkdown: enrichedSpecMarkdown,
+            acceptanceCriteria,
+            testPlan,
+            referencePrompt,
+          },
+          memoryTrace: {
+            sourceMemoryIds,
+            fallbackUsed: retrieval.body.meta.fallbackUsed,
+            contextSignals: retrieval.body.meta.contextSignals,
+          },
+        },
+      };
+    },
+
+    composeHandoff(payload) {
+      const projectId = toTrimmedString(payload?.projectId);
+      const ticketId = toTrimmedString(payload?.ticketId);
+      const summary = toTrimmedString(payload?.summary);
+
+      if (!projectId) {
+        return {
+          status: 400,
+          body: { error: "projectId is required" },
+        };
+      }
+      if (!ticketId) {
+        return {
+          status: 400,
+          body: { error: "ticketId is required" },
+        };
+      }
+      if (!summary) {
+        return {
+          status: 400,
+          body: { error: "summary is required" },
+        };
+      }
+
+      const retrieval = runRetrieval({
+        projectId,
+        featureScope: payload?.featureScope,
+        taskType: payload?.taskType,
+        priority: payload?.priority,
+        labels: payload?.labels,
+        searchQuery: payload?.searchQuery,
+        limit: payload?.limit ?? 5,
+      });
+      if (retrieval.status !== 200) {
+        return retrieval;
+      }
+
+      const entries = retrieval.body.entries;
+      const lessonsSection = buildLessonsSection(entries);
+      const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
+
+      const handoffMarkdown = [
+        `# Handoff - ${ticketId}`,
+        "",
+        `Summary: ${summary}`,
+        "",
+        lessonsSection,
+        "",
+        memoryIdsLine,
+      ].join("\n");
+
+      return {
+        status: 200,
+        body: {
+          handoffMarkdown,
+          memoryTrace: {
+            sourceMemoryIds,
+            fallbackUsed: retrieval.body.meta.fallbackUsed,
+            contextSignals: retrieval.body.meta.contextSignals,
+          },
+        },
+      };
+    },
+
+    composeReferencePrompt(payload) {
+      const projectId = toTrimmedString(payload?.projectId);
+      const ticketId = toTrimmedString(payload?.ticketId);
+      const title = toTrimmedString(payload?.title);
+      const basePrompt = toTrimmedString(payload?.basePrompt);
+
+      if (!projectId) {
+        return {
+          status: 400,
+          body: { error: "projectId is required" },
+        };
+      }
+      if (!ticketId) {
+        return {
+          status: 400,
+          body: { error: "ticketId is required" },
+        };
+      }
+      if (!title) {
+        return {
+          status: 400,
+          body: { error: "title is required" },
+        };
+      }
+
+      const retrieval = runRetrieval({
+        projectId,
+        featureScope: payload?.featureScope,
+        taskType: payload?.taskType,
+        priority: payload?.priority,
+        labels: payload?.labels,
+        searchQuery: payload?.searchQuery,
+        limit: payload?.limit ?? 5,
+      });
+      if (retrieval.status !== 200) {
+        return retrieval;
+      }
+
+      const entries = retrieval.body.entries;
+      const lessonsSection = buildLessonsSection(entries);
+      const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
+
+      const referencePrompt = [
+        basePrompt || `You are assigned to ${ticketId}: ${title}.`,
+        "",
+        lessonsSection,
+        "",
+        memoryIdsLine,
+      ].join("\n");
+
+      return {
+        status: 200,
+        body: {
+          referencePrompt,
+          memoryTrace: {
+            sourceMemoryIds,
+            fallbackUsed: retrieval.body.meta.fallbackUsed,
+            contextSignals: retrieval.body.meta.contextSignals,
           },
         },
       };
