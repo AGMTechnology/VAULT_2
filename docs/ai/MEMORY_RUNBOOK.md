@@ -25,6 +25,29 @@ curl -X POST http://127.0.0.1:3022/api/memory \
   }'
 ```
 
+Post-mortem memory entry (5-point human/process template):
+```bash
+curl -X POST http://127.0.0.1:3022/api/memory \
+  -H "content-type: application/json" \
+  -d '{
+    "projectId": "vault-2",
+    "featureScope": "workflow",
+    "taskType": "dev",
+    "agentId": "codex-dev",
+    "lessonCategory": "error",
+    "content": "[POST_MORTEM] Front request used invalid API limit.",
+    "sourceRefs": ["VAULT-2-021", "label:postmortem"],
+    "labels": ["postmortem", "api-contract"],
+    "processLesson": {
+      "decisionMoment": "Set fetch limit in UI request builder.",
+      "assumptionMade": "Backend would auto-clamp values.",
+      "humanReason": "Rushed UI tweak and skipped contract reread.",
+      "missedControl": "Compare request params with API validator bounds.",
+      "nextRule": "Use shared bounded builder and add negative-value test."
+    }
+  }'
+```
+
 Retrieve contextual memory:
 ```bash
 curl -X POST http://127.0.0.1:3022/api/memory/retrieve \
@@ -88,6 +111,12 @@ curl "http://127.0.0.1:3022/api/workflow/audit?projectId=vault-2&ticketId=VAULT-
 4. Keep OpenAPI and docs aligned with behavior changes.
 5. Add `[DEV_DONE]` evidence comment before `in-review`.
 6. Push one memory entry with source refs for the finished ticket.
+7. For post-mortem entries, include structured `processLesson` with 5 mandatory points:
+   - decisionMoment
+   - assumptionMade
+   - humanReason
+   - missedControl
+   - nextRule
 
 ## Onboarding checklist
 - Confirm local setup: `npm install`, `npm run test`, `npm run start:api`.

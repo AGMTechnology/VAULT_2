@@ -55,8 +55,11 @@ export function rollbackMemorySchemaMigration(db) {
 export function insertMemoryEntry(db, entry) {
   const createdAt = entry.createdAt ?? new Date().toISOString();
   const sourceRefs = Array.isArray(entry.sourceRefs) ? entry.sourceRefs : [];
+  const processLesson = entry.processLesson && typeof entry.processLesson === "object"
+    ? entry.processLesson
+    : null;
 
-  const stmt = db.prepare(`
+  const memoryStmt = db.prepare(`
     INSERT INTO memory_entries (
       id,
       project_id,
@@ -80,17 +83,53 @@ export function insertMemoryEntry(db, entry) {
     )
   `);
 
-  stmt.run({
-    id: entry.id,
-    projectId: entry.projectId,
-    featureScope: entry.featureScope,
-    taskType: entry.taskType,
-    agentId: entry.agentId,
-    lessonCategory: entry.lessonCategory,
-    content: entry.content,
-    sourceRefs: JSON.stringify(sourceRefs),
-    createdAt,
+  const processLessonStmt = db.prepare(`
+    INSERT INTO memory_process_lessons (
+      memory_entry_id,
+      decision_moment,
+      assumption_made,
+      human_reason,
+      missed_control,
+      next_rule,
+      created_at
+    ) VALUES (
+      @memoryEntryId,
+      @decisionMoment,
+      @assumptionMade,
+      @humanReason,
+      @missedControl,
+      @nextRule,
+      @createdAt
+    )
+  `);
+
+  const insert = db.transaction(() => {
+    memoryStmt.run({
+      id: entry.id,
+      projectId: entry.projectId,
+      featureScope: entry.featureScope,
+      taskType: entry.taskType,
+      agentId: entry.agentId,
+      lessonCategory: entry.lessonCategory,
+      content: entry.content,
+      sourceRefs: JSON.stringify(sourceRefs),
+      createdAt,
+    });
+
+    if (processLesson) {
+      processLessonStmt.run({
+        memoryEntryId: entry.id,
+        decisionMoment: processLesson.decisionMoment,
+        assumptionMade: processLesson.assumptionMade,
+        humanReason: processLesson.humanReason,
+        missedControl: processLesson.missedControl,
+        nextRule: processLesson.nextRule,
+        createdAt,
+      });
+    }
   });
+
+  insert();
 }
 
 export function queryMemoryEntries(db, rawFilters = {}) {
@@ -99,27 +138,27 @@ export function queryMemoryEntries(db, rawFilters = {}) {
   const params = {};
 
   if (filters.projectId) {
-    where.push("project_id = @projectId");
+    where.push("m.project_id = @projectId");
     params.projectId = filters.projectId;
   }
   if (filters.featureScope) {
-    where.push("feature_scope = @featureScope");
+    where.push("m.feature_scope = @featureScope");
     params.featureScope = filters.featureScope;
   }
   if (filters.taskType) {
-    where.push("task_type = @taskType");
+    where.push("m.task_type = @taskType");
     params.taskType = filters.taskType;
   }
   if (filters.agentId) {
-    where.push("agent_id = @agentId");
+    where.push("m.agent_id = @agentId");
     params.agentId = filters.agentId;
   }
   if (filters.lessonCategory) {
-    where.push("lesson_category = @lessonCategory");
+    where.push("m.lesson_category = @lessonCategory");
     params.lessonCategory = filters.lessonCategory;
   }
   if (filters.searchQuery) {
-    where.push("content LIKE @searchQuery");
+    where.push("(m.content LIKE @searchQuery OR p.decision_moment LIKE @searchQuery OR p.assumption_made LIKE @searchQuery OR p.human_reason LIKE @searchQuery OR p.missed_control LIKE @searchQuery OR p.next_rule LIKE @searchQuery)");
     params.searchQuery = `%${filters.searchQuery}%`;
   }
 
@@ -127,18 +166,25 @@ export function queryMemoryEntries(db, rawFilters = {}) {
 
   const stmt = db.prepare(`
     SELECT
-      id,
-      project_id,
-      feature_scope,
-      task_type,
-      agent_id,
-      lesson_category,
-      content,
-      source_refs,
-      created_at
-    FROM memory_entries
+      m.id,
+      m.project_id,
+      m.feature_scope,
+      m.task_type,
+      m.agent_id,
+      m.lesson_category,
+      m.content,
+      m.source_refs,
+      m.created_at,
+      p.decision_moment,
+      p.assumption_made,
+      p.human_reason,
+      p.missed_control,
+      p.next_rule
+    FROM memory_entries m
+    LEFT JOIN memory_process_lessons p
+      ON p.memory_entry_id = m.id
     ${whereClause}
-    ORDER BY created_at DESC
+    ORDER BY m.created_at DESC
     LIMIT @limit
   `);
 
@@ -154,6 +200,16 @@ export function queryMemoryEntries(db, rawFilters = {}) {
     content: row.content,
     sourceRefs: JSON.parse(row.source_refs),
     createdAt: row.created_at,
+    processLesson:
+      row.decision_moment && row.assumption_made && row.human_reason && row.missed_control && row.next_rule
+        ? {
+            decisionMoment: row.decision_moment,
+            assumptionMade: row.assumption_made,
+            humanReason: row.human_reason,
+            missedControl: row.missed_control,
+            nextRule: row.next_rule,
+          }
+        : null,
   }));
 }
 

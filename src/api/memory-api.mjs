@@ -27,6 +27,13 @@ function toStringArray(value) {
     .filter(Boolean);
 }
 
+function toOptionalObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value;
+}
+
 function isDuplicateError(error) {
   return String(error?.code || "").startsWith("SQLITE_CONSTRAINT");
 }
@@ -71,6 +78,64 @@ function parseIsoTime(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function hasPostMortemSignal({ content, sourceRefs, labels }) {
+  const normalizedContent = toTrimmedString(content).toLowerCase();
+  const normalizedSourceRefs = toStringArray(sourceRefs).map((value) => value.toLowerCase());
+  const normalizedLabels = toStringArray(labels).map((value) => value.toLowerCase());
+
+  if (normalizedLabels.includes("postmortem")) {
+    return true;
+  }
+  if (normalizedSourceRefs.includes("label:postmortem")) {
+    return true;
+  }
+  return /\bpost[\s\-_]?mortem\b/.test(normalizedContent);
+}
+
+function validateProcessLesson(raw) {
+  if (raw == null) {
+    return { ok: true, value: null, errors: [] };
+  }
+
+  const value = toOptionalObject(raw);
+  if (!value) {
+    return {
+      ok: false,
+      value: null,
+      errors: ["processLesson must be an object"],
+    };
+  }
+
+  const decisionMoment = toTrimmedString(value.decisionMoment);
+  const assumptionMade = toTrimmedString(value.assumptionMade);
+  const humanReason = toTrimmedString(value.humanReason);
+  const missedControl = toTrimmedString(value.missedControl);
+  const nextRule = toTrimmedString(value.nextRule);
+
+  const errors = [];
+  if (!decisionMoment) errors.push("processLesson.decisionMoment is required");
+  if (!assumptionMade) errors.push("processLesson.assumptionMade is required");
+  if (!humanReason) errors.push("processLesson.humanReason is required");
+  if (!missedControl) errors.push("processLesson.missedControl is required");
+  if (!nextRule) errors.push("processLesson.nextRule is required");
+
+  if (errors.length > 0) {
+    return { ok: false, value: null, errors };
+  }
+
+  return {
+    ok: true,
+    value: {
+      decisionMoment,
+      assumptionMade,
+      humanReason,
+      missedControl,
+      nextRule,
+    },
+    errors: [],
+  };
+}
+
 function validatePostPayload(payload) {
   const projectId = toTrimmedString(payload?.projectId);
   const featureScope = toTrimmedString(payload?.featureScope);
@@ -80,6 +145,8 @@ function validatePostPayload(payload) {
   const content = toTrimmedString(payload?.content);
   const sourceRefs = toStringArray(payload?.sourceRefs);
   const labels = toStringArray(payload?.labels);
+  const processLessonValidation = validateProcessLesson(payload?.processLesson);
+  const processLesson = processLessonValidation.value;
   const explicitId = toTrimmedString(payload?.id);
   const createdAt = toTrimmedString(payload?.createdAt);
 
@@ -92,6 +159,7 @@ function validatePostPayload(payload) {
   if (!lessonCategory) errors.push("lessonCategory is required");
   if (!content) errors.push("content is required");
   if (sourceRefs.length === 0) errors.push("sourceRefs must contain at least one source id");
+  if (!processLessonValidation.ok) errors.push(...processLessonValidation.errors);
 
   if (taskType && !ALLOWED_TASK_TYPES.has(taskType)) {
     errors.push("taskType must be one of dev|design|qa|pm|other");
@@ -99,6 +167,10 @@ function validatePostPayload(payload) {
 
   if (lessonCategory && !ALLOWED_LESSON_CATEGORIES.has(lessonCategory)) {
     errors.push("lessonCategory must be one of success|error|decision|constraint");
+  }
+
+  if (hasPostMortemSignal({ content, sourceRefs, labels }) && !processLesson) {
+    errors.push("processLesson is required for post-mortem entries");
   }
 
   if (errors.length > 0) {
@@ -117,6 +189,7 @@ function validatePostPayload(payload) {
       content,
       sourceRefs: unique([...sourceRefs, ...toLabelRefs(labels)]),
       labels: unique(labels.map((label) => label.toLowerCase())),
+      processLesson,
       createdAt: createdAt || new Date().toISOString(),
     },
   };
@@ -323,6 +396,9 @@ function scoreEntry(entry, context) {
   const entryFeature = entry.featureScope.toLowerCase();
   const entryTask = entry.taskType.toLowerCase();
   const entryContent = entry.content.toLowerCase();
+  const processLessonText = entry.processLesson
+    ? Object.values(entry.processLesson).join(" ").toLowerCase()
+    : "";
   const entryLabels = parseLabelRefs(entry.sourceRefs);
 
   score += 5;
@@ -357,7 +433,9 @@ function scoreEntry(entry, context) {
         .map((term) => term.trim())
         .filter((term) => term.length >= 3),
     );
-    const hits = terms.filter((term) => entryContent.includes(term));
+    const hits = terms.filter(
+      (term) => entryContent.includes(term) || processLessonText.includes(term),
+    );
     if (hits.length > 0) {
       score += Math.min(18, hits.length * 6);
       reasons.push(`search:matched(${hits.join(",")})`);
@@ -507,6 +585,35 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
     return entries.map((entry) => entry.id);
   }
 
+  function buildHumanProcessLessonsSection(entries) {
+    const processEntries = entries.filter(
+      (entry) => entry.processLesson && typeof entry.processLesson === "object",
+    );
+
+    if (processEntries.length === 0) {
+      return "";
+    }
+
+    const lines = processEntries.map((entry) => {
+      const processLesson = entry.processLesson;
+      return [
+        `- [${entry.id}] Decision moment: ${processLesson.decisionMoment}`,
+        `  Assumption made: ${processLesson.assumptionMade}`,
+        `  Human/process reason: ${processLesson.humanReason}`,
+        `  Missed control: ${processLesson.missedControl}`,
+        `  Next rule: ${processLesson.nextRule}`,
+      ].join("\n");
+    });
+
+    return ["## Human/Process Lessons", ...lines].join("\n");
+  }
+
+  function buildHumanProcessSourceIds(entries) {
+    return entries
+      .filter((entry) => entry.processLesson && typeof entry.processLesson === "object")
+      .map((entry) => entry.id);
+  }
+
   return {
     postMemory(payload) {
       const validated = validatePostPayload(payload);
@@ -542,6 +649,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
               content: validated.value.content,
               sourceRefs: validated.value.sourceRefs,
               labels: validated.value.labels,
+              processLesson: validated.value.processLesson,
               createdAt: validated.value.createdAt,
             },
           },
@@ -642,18 +750,25 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
 
       const entries = retrieval.body.entries;
       const lessonsSection = buildLessonsSection(entries);
+      const humanProcessSection = buildHumanProcessLessonsSection(entries);
       const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const humanProcessSourceMemoryIds = buildHumanProcessSourceIds(entries);
       const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
       const baseSpec = specMarkdown || "No initial specification provided.";
 
-      const enrichedSpecMarkdown = [baseSpec, "", lessonsSection, "", memoryIdsLine].join("\n");
-      const referencePrompt = [
-        `You are assigned to ticket "${title}".`,
-        "",
-        lessonsSection,
-        "",
-        memoryIdsLine,
-      ].join("\n");
+      const specSections = [baseSpec, "", lessonsSection];
+      if (humanProcessSection) {
+        specSections.push("", humanProcessSection);
+      }
+      specSections.push("", memoryIdsLine);
+      const enrichedSpecMarkdown = specSections.join("\n");
+
+      const promptSections = [`You are assigned to ticket "${title}".`, "", lessonsSection];
+      if (humanProcessSection) {
+        promptSections.push("", humanProcessSection);
+      }
+      promptSections.push("", memoryIdsLine);
+      const referencePrompt = promptSections.join("\n");
 
       return {
         status: 200,
@@ -667,6 +782,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
           },
           memoryTrace: {
             sourceMemoryIds,
+            humanProcessSourceMemoryIds,
             fallbackUsed: retrieval.body.meta.fallbackUsed,
             contextSignals: retrieval.body.meta.contextSignals,
           },
@@ -713,18 +829,17 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
 
       const entries = retrieval.body.entries;
       const lessonsSection = buildLessonsSection(entries);
+      const humanProcessSection = buildHumanProcessLessonsSection(entries);
       const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const humanProcessSourceMemoryIds = buildHumanProcessSourceIds(entries);
       const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
 
-      const handoffMarkdown = [
-        `# Handoff - ${ticketId}`,
-        "",
-        `Summary: ${summary}`,
-        "",
-        lessonsSection,
-        "",
-        memoryIdsLine,
-      ].join("\n");
+      const handoffSections = [`# Handoff - ${ticketId}`, "", `Summary: ${summary}`, "", lessonsSection];
+      if (humanProcessSection) {
+        handoffSections.push("", humanProcessSection);
+      }
+      handoffSections.push("", memoryIdsLine);
+      const handoffMarkdown = handoffSections.join("\n");
 
       return {
         status: 200,
@@ -732,6 +847,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
           handoffMarkdown,
           memoryTrace: {
             sourceMemoryIds,
+            humanProcessSourceMemoryIds,
             fallbackUsed: retrieval.body.meta.fallbackUsed,
             contextSignals: retrieval.body.meta.contextSignals,
           },
@@ -779,16 +895,17 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
 
       const entries = retrieval.body.entries;
       const lessonsSection = buildLessonsSection(entries);
+      const humanProcessSection = buildHumanProcessLessonsSection(entries);
       const sourceMemoryIds = buildSourceMemoryIds(entries);
+      const humanProcessSourceMemoryIds = buildHumanProcessSourceIds(entries);
       const memoryIdsLine = `Memory source IDs: ${sourceMemoryIds.join(", ") || "none"}`;
 
-      const referencePrompt = [
-        basePrompt || `You are assigned to ${ticketId}: ${title}.`,
-        "",
-        lessonsSection,
-        "",
-        memoryIdsLine,
-      ].join("\n");
+      const promptSections = [basePrompt || `You are assigned to ${ticketId}: ${title}.`, "", lessonsSection];
+      if (humanProcessSection) {
+        promptSections.push("", humanProcessSection);
+      }
+      promptSections.push("", memoryIdsLine);
+      const referencePrompt = promptSections.join("\n");
 
       return {
         status: 200,
@@ -796,6 +913,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
           referencePrompt,
           memoryTrace: {
             sourceMemoryIds,
+            humanProcessSourceMemoryIds,
             fallbackUsed: retrieval.body.meta.fallbackUsed,
             contextSignals: retrieval.body.meta.contextSignals,
           },
@@ -846,6 +964,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
               lessonCategory: memory.lessonCategory,
               labels: memory.labels,
               sourceRefs: memory.sourceRefs,
+              processLesson: memory.processLesson,
             },
           },
           createdAt: new Date().toISOString(),
@@ -865,6 +984,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
               content: memory.content,
               sourceRefs: memory.sourceRefs,
               labels: memory.labels,
+              processLesson: memory.processLesson,
               createdAt: memory.createdAt,
             },
             audit: {

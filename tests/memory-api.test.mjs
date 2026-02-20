@@ -217,3 +217,72 @@ test("GET /api/memory returns 400 when projectId is missing", async () => {
     assert.equal(response.status, 400);
   });
 });
+
+test("POST /api/memory rejects post-mortem entry when processLesson is missing", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/api/memory`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "vault-2",
+        featureScope: "workflow",
+        taskType: "dev",
+        agentId: "codex-dev",
+        lessonCategory: "error",
+        content: "[POST_MORTEM] Ticket closed with missing runtime check.",
+        sourceRefs: ["VAULT-2-021", "label:postmortem"],
+        labels: ["postmortem"],
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    const payload = await response.json();
+    assert.equal(
+      payload.details.includes("processLesson is required for post-mortem entries"),
+      true,
+    );
+  });
+});
+
+test("POST /api/memory persists structured processLesson and GET /api/memory returns it", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const createResponse = await fetch(`${baseUrl}/api/memory`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: "mem-process-001",
+        projectId: "vault-2",
+        featureScope: "workflow",
+        taskType: "dev",
+        agentId: "codex-dev",
+        lessonCategory: "error",
+        content: "[POST_MORTEM] Front limit outside API contract.",
+        sourceRefs: ["VAULT-2-010", "label:postmortem"],
+        labels: ["postmortem"],
+        processLesson: {
+          decisionMoment: "Set hardcoded limit in memory-hub fetch URL.",
+          assumptionMade: "API would accept larger limits automatically.",
+          humanReason: "Focused on loading more data quickly and skipped contract check.",
+          missedControl: "Compare UI query parameters with API validation rules.",
+          nextRule: "Use shared bounded query builder and keep clamp tests.",
+        },
+      }),
+    });
+    assert.equal(createResponse.status, 201);
+    const createPayload = await createResponse.json();
+    assert.equal(
+      createPayload.entry.processLesson.decisionMoment,
+      "Set hardcoded limit in memory-hub fetch URL.",
+    );
+
+    const listResponse = await fetch(`${baseUrl}/api/memory?projectId=vault-2&limit=10`);
+    assert.equal(listResponse.status, 200);
+    const listPayload = await listResponse.json();
+    const created = listPayload.entries.find((entry) => entry.id === "mem-process-001");
+    assert.equal(Boolean(created), true);
+    assert.equal(
+      created.processLesson.nextRule,
+      "Use shared bounded query builder and keep clamp tests.",
+    );
+  });
+});

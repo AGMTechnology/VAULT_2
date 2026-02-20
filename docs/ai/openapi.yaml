@@ -267,6 +267,26 @@ components:
           items:
             type: string
 
+    ProcessLesson:
+      type: object
+      required: [decisionMoment, assumptionMade, humanReason, missedControl, nextRule]
+      properties:
+        decisionMoment:
+          type: string
+          description: Where the decision happened (code path, module, or workflow step).
+        assumptionMade:
+          type: string
+          description: Assumption taken at decision time.
+        humanReason:
+          type: string
+          description: Human/process reason for the mistake.
+        missedControl:
+          type: string
+          description: Control/check that should have prevented the issue.
+        nextRule:
+          type: string
+          description: Explicit rule to apply for future work.
+
     MemoryEntry:
       type: object
       required:
@@ -303,6 +323,10 @@ components:
           type: array
           items:
             type: string
+        processLesson:
+          oneOf:
+            - $ref: "#/components/schemas/ProcessLesson"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -350,6 +374,14 @@ components:
           type: array
           items:
             type: string
+        processLesson:
+          oneOf:
+            - $ref: "#/components/schemas/ProcessLesson"
+            - type: "null"
+          description: |
+            Structured 5-point post-mortem payload.
+            Required when entry is tagged as post-mortem (e.g. label `postmortem`,
+            `label:postmortem` in sourceRefs, or `[POST_MORTEM]` marker in content).
         createdAt:
           type: string
           format: date-time
@@ -422,6 +454,10 @@ components:
       required: [sourceMemoryIds, fallbackUsed, contextSignals]
       properties:
         sourceMemoryIds:
+          type: array
+          items:
+            type: string
+        humanProcessSourceMemoryIds:
           type: array
           items:
             type: string
@@ -579,6 +615,13 @@ components:
           type: array
           items:
             type: string
+        processLesson:
+          oneOf:
+            - $ref: "#/components/schemas/ProcessLesson"
+            - type: "null"
+          description: |
+            Structured 5-point post-mortem payload.
+            Required when entry is tagged as post-mortem.
         createdAt:
           type: string
           format: date-time

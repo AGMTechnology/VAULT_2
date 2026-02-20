@@ -182,3 +182,112 @@ test("POST /api/compose/reference-prompt traces source memory ids", async () => 
     assert.equal(payload.memoryTrace.sourceMemoryIds.includes("mem-prompt-1"), true);
   });
 });
+
+test("compose endpoints include Human/Process Lessons when structured post-mortem context exists", async () => {
+  await withServer(async ({ baseUrl }) => {
+    await appendMemory(baseUrl, {
+      id: "mem-process-compose-1",
+      projectId: "vault-2",
+      featureScope: "workflow",
+      taskType: "dev",
+      agentId: "codex-dev",
+      lessonCategory: "error",
+      content: "[POST_MORTEM] UI memory request used invalid limit.",
+      sourceRefs: ["VAULT-2-010", "label:postmortem"],
+      labels: ["postmortem", "workflow"],
+      processLesson: {
+        decisionMoment: "Set fetch limit manually in UI module.",
+        assumptionMade: "Expected backend to auto-cap limit.",
+        humanReason: "Rushed UX tweak and skipped API contract recheck.",
+        missedControl: "Verify request params against API validator boundaries.",
+        nextRule: "Only build request URLs via bounded helper + test.",
+      },
+      createdAt: "2026-02-20T12:00:00.000Z",
+    });
+
+    const ticketResponse = await fetch(`${baseUrl}/api/compose/ticket`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "vault-2",
+        title: "Apply memory process lessons in workflow",
+        featureScope: "workflow",
+        taskType: "dev",
+        labels: ["workflow"],
+        specMarkdown: "Base spec",
+      }),
+    });
+    assert.equal(ticketResponse.status, 200);
+    const ticketPayload = await ticketResponse.json();
+    assert.equal(ticketPayload.ticket.specMarkdown.includes("Human/Process Lessons"), true);
+    assert.equal(ticketPayload.ticket.specMarkdown.includes("Decision moment"), true);
+    assert.equal(ticketPayload.ticket.referencePrompt.includes("Human/Process Lessons"), true);
+
+    const handoffResponse = await fetch(`${baseUrl}/api/compose/handoff`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "vault-2",
+        ticketId: "VAULT-2-021",
+        summary: "Apply process lesson",
+        featureScope: "workflow",
+        taskType: "dev",
+        labels: ["workflow"],
+      }),
+    });
+    assert.equal(handoffResponse.status, 200);
+    const handoffPayload = await handoffResponse.json();
+    assert.equal(handoffPayload.handoffMarkdown.includes("Human/Process Lessons"), true);
+    assert.equal(handoffPayload.handoffMarkdown.includes("Next rule"), true);
+
+    const promptResponse = await fetch(`${baseUrl}/api/compose/reference-prompt`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "vault-2",
+        ticketId: "VAULT-2-021",
+        title: "Reference prompt with process lessons",
+        featureScope: "workflow",
+        taskType: "dev",
+        labels: ["workflow"],
+      }),
+    });
+    assert.equal(promptResponse.status, 200);
+    const promptPayload = await promptResponse.json();
+    assert.equal(promptPayload.referencePrompt.includes("Human/Process Lessons"), true);
+    assert.equal(promptPayload.referencePrompt.includes("Missed control"), true);
+  });
+});
+
+test("compose ticket remains backward-compatible with legacy memory entries without processLesson", async () => {
+  await withServer(async ({ baseUrl }) => {
+    await appendMemory(baseUrl, {
+      id: "mem-legacy-1",
+      projectId: "vault-2",
+      featureScope: "workflow",
+      taskType: "dev",
+      agentId: "codex-dev",
+      lessonCategory: "decision",
+      content: "Legacy memory without structured process fields.",
+      sourceRefs: ["VAULT-2-004"],
+      labels: ["workflow"],
+      createdAt: "2026-02-20T12:10:00.000Z",
+    });
+
+    const response = await fetch(`${baseUrl}/api/compose/ticket`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "vault-2",
+        title: "Legacy compatibility",
+        featureScope: "workflow",
+        taskType: "dev",
+        labels: ["workflow"],
+      }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ticket.specMarkdown.includes("Lessons to avoid repeating mistakes"), true);
+    assert.equal(payload.ticket.specMarkdown.includes("Human/Process Lessons"), false);
+  });
+});

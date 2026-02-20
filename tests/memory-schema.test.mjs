@@ -29,6 +29,11 @@ test("migration up creates memory_entries table and contextual indexes", () => {
     .get();
   assert.equal(table?.name, "memory_entries");
 
+  const processTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_process_lessons'")
+    .get();
+  assert.equal(processTable?.name, "memory_process_lessons");
+
   const indexRows = db
     .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='memory_entries'")
     .all();
@@ -57,6 +62,13 @@ test("insert and query memory entries by contextual filters", () => {
     lessonCategory: "error",
     content: "Avoid missing project filter in retrieval query",
     sourceRefs: ["VAULT-2-003", "commit:abc123"],
+    processLesson: {
+      decisionMoment: "Adjusted filter logic in retrieval handler.",
+      assumptionMade: "All callers already provided project context.",
+      humanReason: "Focused on main path and skipped edge-case review.",
+      missedControl: "Recheck request contract against query validator.",
+      nextRule: "Add contract test before merging retrieval changes.",
+    },
     createdAt: "2026-02-20T09:00:00.000Z",
   });
 
@@ -82,6 +94,10 @@ test("insert and query memory entries by contextual filters", () => {
   assert.equal(rows[0].id, "mem-1");
   assert.equal(rows[0].lessonCategory, "error");
   assert.deepEqual(rows[0].sourceRefs, ["VAULT-2-003", "commit:abc123"]);
+  assert.equal(
+    rows[0].processLesson.decisionMoment,
+    "Adjusted filter logic in retrieval handler.",
+  );
 
   db.close();
 });

@@ -14,9 +14,16 @@
 - clear success/failure/decision statements
 - source references attached
 - next-session focus added
+- For post-mortem entries, include full 5-point process lesson:
+  - decision moment
+  - assumption made
+  - human/process reason
+  - missed control
+  - next rule
 
 ## API-focused execution checklist
 - Validate payloads and expected HTTP codes (`200/201/400/404/409`).
 - For retrieval/injection changes, cover one nominal path and one failure path.
 - Keep OpenAPI contract (`docs/ai/openapi.yaml`) aligned with real behavior.
 - Update `docs/ai/MEMORY_RUNBOOK.md` when commands or payload examples change.
+- Verify compose endpoints include `Human/Process Lessons` when contextual post-mortem memory exists.
