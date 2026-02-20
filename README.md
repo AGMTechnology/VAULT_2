@@ -32,6 +32,7 @@ Memory-first platform for contextual AI memory orchestration.
 - Endpoints:
   - `POST /api/memory` append a memory entry
   - `GET /api/memory` list and filter entries
+  - `POST /api/memory/retrieve` contextual ranking with score/reasons/source refs
   - `POST /api/workflow/ticket-finish` enforce memory push at ticket completion (`in-review`/`done`)
   - `GET /api/workflow/audit` list memory push audit entries by project/ticket/agent
 - Expected validation codes:

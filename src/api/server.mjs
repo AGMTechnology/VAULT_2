@@ -96,6 +96,18 @@ export async function startMemoryApiServer({
         return;
       }
 
+      if (url.pathname === "/api/memory/retrieve") {
+        if (req.method !== "POST") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
+        const body = await readJson(req);
+        const result = api.retrieveMemory(body);
+        json(res, result.status, result.body);
+        return;
+      }
+
       if (url.pathname === "/api/workflow/audit") {
         if (req.method !== "GET") {
           json(res, 405, { error: "Method not allowed" });

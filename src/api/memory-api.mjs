@@ -10,6 +10,7 @@ import {
 const ALLOWED_TASK_TYPES = new Set(["dev", "design", "qa", "pm", "other"]);
 const ALLOWED_LESSON_CATEGORIES = new Set(["success", "error", "decision", "constraint"]);
 const ALLOWED_WORKFLOW_END_STATUSES = new Set(["in-review", "done"]);
+const ALLOWED_PRIORITIES = new Set(["P0", "P1", "P2", "P3"]);
 
 function toTrimmedString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -58,6 +59,11 @@ function parseLabelRefs(sourceRefs) {
 
 function unique(items) {
   return Array.from(new Set(items));
+}
+
+function parseIsoTime(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function validatePostPayload(payload) {
@@ -245,6 +251,139 @@ function validateWorkflowAuditQuery(query) {
   };
 }
 
+function validateRetrievePayload(payload) {
+  const projectId = toTrimmedString(payload?.projectId);
+  const featureScope = toTrimmedString(payload?.featureScope);
+  const taskType = toTrimmedString(payload?.taskType).toLowerCase();
+  const priority = toTrimmedString(payload?.priority).toUpperCase();
+  const labels = toStringArray(payload?.labels).map((label) => label.toLowerCase());
+  const searchQuery = toTrimmedString(payload?.searchQuery);
+  const limitRaw = Number.parseInt(toTrimmedString(payload?.limit), 10);
+  const limit = Number.isInteger(limitRaw) ? limitRaw : 10;
+
+  const errors = [];
+  if (!projectId) {
+    errors.push("projectId is required");
+  }
+  if (taskType && !ALLOWED_TASK_TYPES.has(taskType)) {
+    errors.push("taskType must be one of dev|design|qa|pm|other");
+  }
+  if (priority && !ALLOWED_PRIORITIES.has(priority)) {
+    errors.push("priority must be one of P0|P1|P2|P3");
+  }
+  if (!Number.isInteger(limit) || limit <= 0 || limit > 50) {
+    errors.push("limit must be an integer between 1 and 50");
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  return {
+    ok: true,
+    value: {
+      projectId,
+      featureScope,
+      taskType,
+      priority,
+      labels,
+      searchQuery,
+      limit,
+    },
+  };
+}
+
+function computePriorityBoost(priority, lessonCategory) {
+  if (!priority) {
+    return 0;
+  }
+
+  const map = {
+    P0: { error: 22, constraint: 18, decision: 12, success: 9 },
+    P1: { error: 18, constraint: 15, decision: 11, success: 9 },
+    P2: { error: 10, constraint: 10, decision: 12, success: 12 },
+    P3: { error: 8, constraint: 8, decision: 10, success: 13 },
+  };
+
+  return map[priority]?.[lessonCategory] ?? 0;
+}
+
+function scoreEntry(entry, context) {
+  let score = 0;
+  const reasons = [];
+  const featureScope = context.featureScope.toLowerCase();
+  const taskType = context.taskType.toLowerCase();
+  const labels = context.labels;
+  const searchQuery = context.searchQuery.toLowerCase();
+  const entryFeature = entry.featureScope.toLowerCase();
+  const entryTask = entry.taskType.toLowerCase();
+  const entryContent = entry.content.toLowerCase();
+  const entryLabels = parseLabelRefs(entry.sourceRefs);
+
+  score += 5;
+
+  if (featureScope) {
+    if (entryFeature === featureScope) {
+      score += 44;
+      reasons.push("feature-scope:exact");
+    } else if (entryFeature.includes(featureScope) || featureScope.includes(entryFeature)) {
+      score += 15;
+      reasons.push("feature-scope:partial");
+    }
+  }
+
+  if (taskType && entryTask === taskType) {
+    score += 26;
+    reasons.push("task-type:exact");
+  }
+
+  if (labels.length > 0) {
+    const matched = labels.filter((label) => entryLabels.includes(label));
+    if (matched.length > 0) {
+      score += matched.length * 18;
+      reasons.push(`labels:matched(${matched.join(",")})`);
+    }
+  }
+
+  if (searchQuery) {
+    const terms = unique(
+      searchQuery
+        .split(/\s+/)
+        .map((term) => term.trim())
+        .filter((term) => term.length >= 3),
+    );
+    const hits = terms.filter((term) => entryContent.includes(term));
+    if (hits.length > 0) {
+      score += Math.min(18, hits.length * 6);
+      reasons.push(`search:matched(${hits.join(",")})`);
+    }
+  }
+
+  const priorityBoost = computePriorityBoost(context.priority, entry.lessonCategory);
+  if (priorityBoost > 0) {
+    score += priorityBoost;
+    reasons.push(`priority:${context.priority}->${entry.lessonCategory}`);
+  }
+
+  const ageMs = Math.max(0, Date.now() - parseIsoTime(entry.createdAt));
+  const ageDays = ageMs / 86_400_000;
+  const recencyBoost = Math.max(1, Math.round(10 - Math.min(9, ageDays)));
+  score += recencyBoost;
+  if (ageDays <= 3) {
+    reasons.push("recency:recent");
+  }
+
+  return {
+    score,
+    reasons,
+    labels: entryLabels,
+  };
+}
+
+function sortByCreatedDesc(a, b) {
+  return parseIsoTime(b.createdAt) - parseIsoTime(a.createdAt);
+}
+
 export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) {
   const normalizedRegistry = normalizeProjectRegistry(projectRegistry);
 
@@ -340,6 +479,98 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
         status: 200,
         body: {
           entries: rows,
+        },
+      };
+    },
+
+    retrieveMemory(payload) {
+      const validated = validateRetrievePayload(payload);
+      if (!validated.ok) {
+        return {
+          status: 400,
+          body: {
+            error: "Invalid retrieval payload",
+            details: validated.errors,
+          },
+        };
+      }
+
+      const context = validated.value;
+
+      if (!hasProject(normalizedRegistry, context.projectId)) {
+        return {
+          status: 404,
+          body: { error: "Project not found" },
+        };
+      }
+
+      const candidates = queryMemoryEntries(db, {
+        projectId: context.projectId,
+        searchQuery: "",
+        limit: 1000,
+      });
+
+      if (candidates.length === 0) {
+        return {
+          status: 200,
+          body: {
+            entries: [],
+            meta: {
+              fallbackUsed: true,
+              totalCandidates: 0,
+            },
+          },
+        };
+      }
+
+      const contextSignals = [
+        context.featureScope,
+        context.taskType,
+        context.priority,
+        context.searchQuery,
+        context.labels.length > 0 ? "labels" : "",
+      ].filter(Boolean).length;
+
+      const scored = candidates.map((entry) => {
+        const result = scoreEntry(entry, context);
+        return {
+          ...entry,
+          labels: result.labels,
+          score: result.score,
+          reasons: result.reasons,
+        };
+      });
+
+      let fallbackUsed = false;
+      let ranked = scored.sort((a, b) => b.score - a.score || sortByCreatedDesc(a, b));
+
+      if (contextSignals === 0) {
+        fallbackUsed = true;
+        ranked = scored
+          .sort(sortByCreatedDesc)
+          .map((entry) => ({
+            ...entry,
+            reasons: unique([...entry.reasons, "fallback:latest-project-memory"]),
+          }));
+      } else if ((ranked[0]?.score ?? 0) < 20) {
+        fallbackUsed = true;
+        ranked = scored
+          .sort(sortByCreatedDesc)
+          .map((entry) => ({
+            ...entry,
+            reasons: unique([...entry.reasons, "fallback:low-context-match"]),
+          }));
+      }
+
+      return {
+        status: 200,
+        body: {
+          entries: ranked.slice(0, context.limit),
+          meta: {
+            fallbackUsed,
+            totalCandidates: candidates.length,
+            contextSignals,
+          },
         },
       };
     },
