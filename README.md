@@ -26,8 +26,20 @@ Memory-first platform for contextual AI memory orchestration.
 
 ## Commands
 - npm test
+- npm run test:tnr
+- npm run test:tnr:full
 - npm run start:api then open `http://127.0.0.1:3022/memory-hub`
 - open `http://127.0.0.1:3022/memory-insights` for insights view
+
+## TNR Runbook
+- `npm run test:tnr` runs the dedicated end-to-end regression suite for memory critical paths:
+  - memory API append/list validation
+  - ticket workflow completion + audit trace
+  - contextual retrieval scoring
+  - compose injection endpoints (ticket/handoff/reference prompt)
+  - UI route availability (`/memory-hub`, `/memory-insights`)
+- `npm run test` runs all feature tests.
+- `npm run test:tnr:full` replays full feature suite and dedicated TNR suite in one command.
 
 ## Memory API v1
 - Start server: `npm run start:api`

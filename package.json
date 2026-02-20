@@ -5,6 +5,8 @@
     "type":  "module",
     "scripts":  {
                     "test":  "node --test",
+                    "test:tnr":  "node --test tests/tnr-memory-suite.test.mjs",
+                    "test:tnr:full":  "npm run test && npm run test:tnr",
                     "start:api":  "node src/api/server.mjs"
                 },
     "dependencies":  {
