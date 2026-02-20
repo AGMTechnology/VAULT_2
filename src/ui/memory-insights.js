@@ -6,7 +6,7 @@ import {
 } from "./memory-insights-model.mjs";
 
 const params = new URLSearchParams(window.location.search);
-const projectId = params.get("projectId") || "vault-2";
+const projectId = params.get("projectId") || "all";
 
 const state = {
   loading: true,

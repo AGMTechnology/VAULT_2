@@ -11,6 +11,7 @@ const ALLOWED_TASK_TYPES = new Set(["dev", "design", "qa", "pm", "other"]);
 const ALLOWED_LESSON_CATEGORIES = new Set(["success", "error", "decision", "constraint"]);
 const ALLOWED_WORKFLOW_END_STATUSES = new Set(["in-review", "done"]);
 const ALLOWED_PRIORITIES = new Set(["P0", "P1", "P2", "P3"]);
+const CROSS_PROJECT_ID = "all";
 
 function toTrimmedString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -44,6 +45,10 @@ function normalizeProjectRegistry(projectRegistry) {
 function hasProject(projectRegistry, projectId) {
   const normalized = toTrimmedString(projectId).toLowerCase();
   return projectRegistry.has(normalized);
+}
+
+function isCrossProjectId(projectId) {
+  return toTrimmedString(projectId).toLowerCase() === CROSS_PROJECT_ID;
 }
 
 function toLabelRefs(labels) {
@@ -401,7 +406,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
 
     const context = validated.value;
 
-    if (!hasProject(normalizedRegistry, context.projectId)) {
+    if (!isCrossProjectId(context.projectId) && !hasProject(normalizedRegistry, context.projectId)) {
       return {
         status: 404,
         body: { error: "Project not found" },
@@ -409,7 +414,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
     }
 
     const candidates = queryMemoryEntries(db, {
-      projectId: context.projectId,
+      projectId: isCrossProjectId(context.projectId) ? "" : context.projectId,
       searchQuery: "",
       limit: 1000,
     });
@@ -564,7 +569,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
 
       const filters = validated.value;
 
-      if (!hasProject(normalizedRegistry, filters.projectId)) {
+      if (!isCrossProjectId(filters.projectId) && !hasProject(normalizedRegistry, filters.projectId)) {
         return {
           status: 404,
           body: { error: "Project not found" },
@@ -572,7 +577,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
       }
 
       let rows = queryMemoryEntries(db, {
-        projectId: filters.projectId,
+        projectId: isCrossProjectId(filters.projectId) ? "" : filters.projectId,
         featureScope: filters.featureScope,
         taskType: filters.taskType,
         agentId: filters.agentId,
@@ -896,7 +901,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
       }
 
       const filters = validated.value;
-      if (!hasProject(normalizedRegistry, filters.projectId)) {
+      if (!isCrossProjectId(filters.projectId) && !hasProject(normalizedRegistry, filters.projectId)) {
         return {
           status: 404,
           body: { error: "Project not found" },
@@ -904,7 +909,7 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
       }
 
       const rows = queryMemoryPushAudits(db, {
-        projectId: filters.projectId,
+        projectId: isCrossProjectId(filters.projectId) ? "" : filters.projectId,
         ticketId: filters.ticketId,
         agentId: filters.agentId,
         limit: filters.limit,

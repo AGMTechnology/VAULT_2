@@ -58,6 +58,16 @@ const ENTRIES = [
     sourceRefs: ["VAULT-2-007"],
     createdAt: "2026-02-20T11:00:00.000Z",
   },
+  {
+    id: "mem-006",
+    projectId: "fairly",
+    featureScope: "workflow",
+    taskType: "pm",
+    lessonCategory: "decision",
+    content: "Fairly cross-project memory for triage.",
+    sourceRefs: ["FAIRLY-0007"],
+    createdAt: "2026-02-20T11:30:00.000Z",
+  },
 ];
 
 test("aggregateMemoryInsights returns top lessons + recurring errors + frequent decisions", () => {
@@ -73,6 +83,16 @@ test("aggregateMemoryInsights returns top lessons + recurring errors + frequent 
   assert.equal(insights.topLessons[0].count >= 2, true);
   assert.equal(insights.recurringErrors[0].count, 2);
   assert.equal(insights.frequentDecisions[0].count, 2);
+  assert.equal(insights.totalSourceEntries, 5);
+});
+
+test("aggregateMemoryInsights treats projectId=all as cross-project mode", () => {
+  const insights = aggregateMemoryInsights(ENTRIES, {
+    projectId: "all",
+    featureScope: "",
+    taskType: "",
+  });
+
   assert.equal(insights.totalSourceEntries, ENTRIES.length);
 });
 

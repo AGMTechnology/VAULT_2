@@ -7,6 +7,7 @@
                     "test":  "node --test",
                     "test:tnr":  "node --test tests/tnr-memory-suite.test.mjs",
                     "test:tnr:full":  "npm run test && npm run test:tnr",
+                    "import:memory:vault0":  "node scripts/import-vault0-memories.mjs",
                     "start:api":  "node src/api/server.mjs"
                 },
     "dependencies":  {

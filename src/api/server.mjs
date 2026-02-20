@@ -87,11 +87,32 @@ function sendStaticFile(res, routeConfig) {
   res.end(fileContent);
 }
 
+function buildProjectRegistryFromDb(db) {
+  const registry = new Set(["vault-2", "all"]);
+  const rows = db
+    .prepare(
+      `
+      SELECT DISTINCT project_id AS projectId
+      FROM memory_entries
+      WHERE project_id IS NOT NULL AND TRIM(project_id) <> ''
+    `,
+    )
+    .all();
+
+  for (const row of rows) {
+    if (!row?.projectId || typeof row.projectId !== "string") {
+      continue;
+    }
+    registry.add(row.projectId.trim().toLowerCase());
+  }
+  return registry;
+}
+
 export async function startMemoryApiServer({
   dbPath,
   host = "127.0.0.1",
   port = 0,
-  projectRegistry = new Set(["vault-2"]),
+  projectRegistry,
 }) {
   if (!dbPath) {
     throw new Error("dbPath is required");
@@ -102,7 +123,11 @@ export async function startMemoryApiServer({
   const db = new Database(dbPath);
   applyMemorySchemaMigration(db);
 
-  const api = createMemoryApi({ db, projectRegistry });
+  const resolvedProjectRegistry = projectRegistry
+    ? new Set(Array.from(projectRegistry).map((value) => String(value).trim().toLowerCase()))
+    : buildProjectRegistryFromDb(db);
+
+  const api = createMemoryApi({ db, projectRegistry: resolvedProjectRegistry });
 
   const server = http.createServer(async (req, res) => {
     try {

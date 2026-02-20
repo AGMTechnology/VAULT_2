@@ -11,13 +11,13 @@ function createTempDbPath() {
   return path.join(dir, "vault2.db");
 }
 
-async function withServer(run) {
+async function withServer(run, options = {}) {
   const dbPath = createTempDbPath();
   const runtime = await startMemoryApiServer({
     dbPath,
     host: "127.0.0.1",
     port: 0,
-    projectRegistry: new Set(["vault-2"]),
+    projectRegistry: options.projectRegistry || new Set(["vault-2"]),
   });
 
   try {
@@ -26,6 +26,52 @@ async function withServer(run) {
     await runtime.close();
   }
 }
+
+test("GET /api/memory supports cross-project mode with projectId=all", async () => {
+  await withServer(
+    async ({ baseUrl }) => {
+      const entries = [
+        {
+          projectId: "vault-2",
+          featureScope: "retrieval",
+          taskType: "dev",
+          agentId: "codex-dev",
+          lessonCategory: "error",
+          content: "vault2 memory",
+          sourceRefs: ["VAULT-2-003"],
+          labels: ["retrieval"],
+        },
+        {
+          projectId: "fairly",
+          featureScope: "workflow",
+          taskType: "pm",
+          agentId: "codex-pm",
+          lessonCategory: "decision",
+          content: "fairly memory",
+          sourceRefs: ["FAIRLY-0007"],
+          labels: ["workflow"],
+        },
+      ];
+
+      for (const entry of entries) {
+        const res = await fetch(`${baseUrl}/api/memory`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(entry),
+        });
+        assert.equal(res.status, 201);
+      }
+
+      const response = await fetch(`${baseUrl}/api/memory?projectId=all&limit=20`);
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.entries.length, 2);
+      const projectIds = payload.entries.map((entry) => entry.projectId).sort();
+      assert.deepEqual(projectIds, ["fairly", "vault-2"]);
+    },
+    { projectRegistry: new Set(["vault-2", "fairly"]) },
+  );
+});
 
 test("POST /api/memory appends an entry and returns source IDs", async () => {
   await withServer(async ({ baseUrl }) => {

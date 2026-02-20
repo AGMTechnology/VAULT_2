@@ -49,11 +49,12 @@ function compareGroups(a, b) {
 
 export function aggregateMemoryInsights(entries, filters = {}) {
   const projectId = toLower(filters.projectId || "");
+  const isCrossProject = projectId === "all";
   const featureScope = toLower(filters.featureScope || "");
   const taskType = toLower(filters.taskType || "");
 
   const filteredEntries = entries.filter((entry) => {
-    if (projectId && toLower(entry.projectId) !== projectId) {
+    if (!isCrossProject && projectId && toLower(entry.projectId) !== projectId) {
       return false;
     }
     if (featureScope && toLower(entry.featureScope) !== featureScope) {
@@ -119,4 +120,3 @@ export function deriveMemoryInsightsUiState({ loading, error, insights }) {
 export function buildMemorySourceLink(projectId, entryId) {
   return `/memory-hub?projectId=${encodeURIComponent(projectId)}&entryId=${encodeURIComponent(entryId)}`;
 }
-
