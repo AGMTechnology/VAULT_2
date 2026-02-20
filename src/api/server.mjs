@@ -10,6 +10,26 @@ import { applyMemorySchemaMigration } from "./memory-store.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const uiDir = path.resolve(__dirname, "../ui");
+
+const staticUiRoutes = {
+  "/memory-hub": {
+    filePath: path.join(uiDir, "memory-hub.html"),
+    contentType: "text/html; charset=utf-8",
+  },
+  "/ui/memory-hub.css": {
+    filePath: path.join(uiDir, "memory-hub.css"),
+    contentType: "text/css; charset=utf-8",
+  },
+  "/ui/memory-hub.js": {
+    filePath: path.join(uiDir, "memory-hub.js"),
+    contentType: "application/javascript; charset=utf-8",
+  },
+  "/ui/memory-hub-model.mjs": {
+    filePath: path.join(uiDir, "memory-hub-model.mjs"),
+    contentType: "application/javascript; charset=utf-8",
+  },
+};
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -39,6 +59,18 @@ function toQueryObject(url) {
   return query;
 }
 
+function sendStaticFile(res, routeConfig) {
+  if (!fs.existsSync(routeConfig.filePath)) {
+    json(res, 404, { error: "Not found" });
+    return;
+  }
+
+  const fileContent = fs.readFileSync(routeConfig.filePath, "utf8");
+  res.statusCode = 200;
+  res.setHeader("content-type", routeConfig.contentType);
+  res.end(fileContent);
+}
+
 export async function startMemoryApiServer({
   dbPath,
   host = "127.0.0.1",
@@ -64,6 +96,16 @@ export async function startMemoryApiServer({
       }
 
       const url = new URL(req.url, "http://localhost");
+
+      const staticRoute = staticUiRoutes[url.pathname];
+      if (staticRoute) {
+        if (req.method !== "GET") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+        sendStaticFile(res, staticRoute);
+        return;
+      }
 
       if (url.pathname === "/api/memory") {
         if (req.method === "POST") {

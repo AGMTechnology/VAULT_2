@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VAULT_2 Memory Hub</title>
+    <link rel="stylesheet" href="/ui/memory-hub.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="memory-hub-root">
+      <aside class="sidebar">
+        <div class="brand-row">
+          <div class="brand-badge">V</div>
+          <div class="brand-title">VAULT_2</div>
+        </div>
+        <div class="project-chip">Memory Hub</div>
+        <div class="sprint-line">
+          <span class="sprint-label">Sprint 12</span>
+          <div class="progress-rail">
+            <span class="progress-segment todo"></span>
+            <span class="progress-segment progress"></span>
+            <span class="progress-segment review"></span>
+            <span class="progress-segment done"></span>
+          </div>
+        </div>
+        <nav class="nav-block">
+          <div class="nav-section-title">Planning</div>
+          <button class="nav-item nav-item-active" type="button">Memory Hub</button>
+          <button class="nav-item" type="button">Insights</button>
+          <button class="nav-item" type="button">Audit</button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="content-header">
+          <div>
+            <p class="project-path">Project Alpha / <strong>Memory Hub</strong></p>
+            <h1>Memory Hub</h1>
+          </div>
+          <button class="primary-action" id="refresh-button" type="button">Refresh</button>
+        </header>
+
+        <section class="toolbar">
+          <label class="field">
+            <span>Search</span>
+            <input id="filter-query" placeholder="Search memory..." />
+          </label>
+          <label class="field">
+            <span>Feature</span>
+            <select id="filter-feature"></select>
+          </label>
+          <label class="field">
+            <span>Task</span>
+            <select id="filter-task"></select>
+          </label>
+          <label class="field">
+            <span>Category</span>
+            <select id="filter-category"></select>
+          </label>
+          <label class="field">
+            <span>Agent</span>
+            <select id="filter-agent"></select>
+          </label>
+        </section>
+
+        <section class="status-strip" id="status-strip"></section>
+
+        <section class="hub-layout">
+          <div class="panel panel-list">
+            <div class="panel-title-row">
+              <h2>Memory Entries</h2>
+              <p id="list-count">0</p>
+            </div>
+            <div id="ui-state-message" class="state-message"></div>
+            <div id="memory-list" class="memory-list"></div>
+          </div>
+
+          <div class="panel panel-detail">
+            <h2>Entry Detail</h2>
+            <div id="memory-detail" class="memory-detail"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/ui/memory-hub.js"></script>
+  </body>
+</html>
