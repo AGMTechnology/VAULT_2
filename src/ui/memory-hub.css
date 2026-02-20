@@ -195,11 +195,32 @@ body {
   background: #5e4ce0;
 }
 
+.secondary-action {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--vault-surface-card-border);
+  border-radius: 12px;
+  color: var(--vault-text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  height: 36px;
+  justify-content: center;
+  margin-top: 22px;
+  min-width: 120px;
+  padding: 0 12px;
+}
+
+.secondary-action:hover {
+  border-color: #cfd3dc;
+}
+
 .toolbar {
   border-bottom: 1px solid var(--vault-surface-divider);
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
   padding: 14px 24px;
 }
 
@@ -224,6 +245,30 @@ body {
   font-size: 13px;
   height: 36px;
   padding: 0 10px;
+}
+
+.active-filters {
+  border-bottom: 1px solid var(--vault-surface-divider);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 24px;
+}
+
+.active-filter-chip {
+  background: #f3f4f6;
+  border-radius: 999px;
+  color: var(--vault-text-secondary);
+  display: inline-flex;
+  font-family: "Cousine", "Consolas", monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.active-filters-empty {
+  color: var(--vault-text-secondary);
+  font-size: 12px;
 }
 
 .status-strip {
@@ -394,6 +439,34 @@ body {
   padding: 12px 14px 16px;
 }
 
+.detail-section {
+  margin-top: 12px;
+}
+
+.detail-section h3 {
+  color: var(--vault-text-primary);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detail-list li {
+  color: var(--vault-text-primary);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.detail-list-empty {
+  color: var(--vault-text-secondary);
+  font-size: 12px;
+}
+
 .detail-title {
   color: var(--vault-text-primary);
   font-family: "Cousine", "Consolas", monospace;
@@ -466,5 +539,9 @@ body {
   .panel-list,
   .panel-detail {
     max-height: none;
+  }
+
+  .secondary-action {
+    margin-top: 0;
   }
 }

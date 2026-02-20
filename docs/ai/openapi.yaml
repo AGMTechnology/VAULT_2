@@ -42,6 +42,18 @@ paths:
           schema:
             type: string
         - in: query
+          name: dateFrom
+          description: Inclusive lower date boundary (`YYYY-MM-DD` or ISO timestamp).
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: dateTo
+          description: Inclusive upper date boundary (`YYYY-MM-DD` or ISO timestamp).
+          schema:
+            type: string
+            format: date
+        - in: query
           name: limit
           schema:
             type: integer

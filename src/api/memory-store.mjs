@@ -26,6 +26,8 @@ function normalizeFilters(filters = {}) {
     agentId: filters.agentId ?? "",
     lessonCategory: filters.lessonCategory ?? "",
     searchQuery: filters.searchQuery ?? "",
+    dateFrom: filters.dateFrom ?? "",
+    dateTo: filters.dateTo ?? "",
     limit: Number.isInteger(filters.limit) ? filters.limit : 100,
   };
 }
@@ -160,6 +162,14 @@ export function queryMemoryEntries(db, rawFilters = {}) {
   if (filters.searchQuery) {
     where.push("(m.content LIKE @searchQuery OR p.decision_moment LIKE @searchQuery OR p.assumption_made LIKE @searchQuery OR p.human_reason LIKE @searchQuery OR p.missed_control LIKE @searchQuery OR p.next_rule LIKE @searchQuery)");
     params.searchQuery = `%${filters.searchQuery}%`;
+  }
+  if (filters.dateFrom) {
+    where.push("m.created_at >= @dateFrom");
+    params.dateFrom = filters.dateFrom;
+  }
+  if (filters.dateTo) {
+    where.push("m.created_at <= @dateTo");
+    params.dateTo = filters.dateTo;
   }
 
   const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";

@@ -211,6 +211,66 @@ test("GET /api/memory supports contextual filters", async () => {
   });
 });
 
+test("GET /api/memory supports date range filters", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const entries = [
+      {
+        id: "mem-date-1",
+        projectId: "vault-2",
+        featureScope: "workflow",
+        taskType: "dev",
+        agentId: "codex-dev",
+        lessonCategory: "error",
+        content: "older memory",
+        sourceRefs: ["VAULT-2-100"],
+        createdAt: "2026-02-18T09:00:00.000Z",
+      },
+      {
+        id: "mem-date-2",
+        projectId: "vault-2",
+        featureScope: "workflow",
+        taskType: "dev",
+        agentId: "codex-dev",
+        lessonCategory: "success",
+        content: "newer memory",
+        sourceRefs: ["VAULT-2-101"],
+        createdAt: "2026-02-20T09:00:00.000Z",
+      },
+    ];
+
+    for (const entry of entries) {
+      const res = await fetch(`${baseUrl}/api/memory`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      assert.equal(res.status, 201);
+    }
+
+    const response = await fetch(
+      `${baseUrl}/api/memory?projectId=vault-2&dateFrom=2026-02-20&dateTo=2026-02-20&limit=20`,
+    );
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.entries.length, 1);
+    assert.equal(payload.entries[0].id, "mem-date-2");
+  });
+});
+
+test("GET /api/memory returns 400 when date range is invalid", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const invalidDateResponse = await fetch(
+      `${baseUrl}/api/memory?projectId=vault-2&dateFrom=invalid-date`,
+    );
+    assert.equal(invalidDateResponse.status, 400);
+
+    const invertedRangeResponse = await fetch(
+      `${baseUrl}/api/memory?projectId=vault-2&dateFrom=2026-02-21&dateTo=2026-02-20`,
+    );
+    assert.equal(invertedRangeResponse.status, 400);
+  });
+});
+
 test("GET /api/memory returns 400 when projectId is missing", async () => {
   await withServer(async ({ baseUrl }) => {
     const response = await fetch(`${baseUrl}/api/memory`);

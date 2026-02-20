@@ -78,6 +78,24 @@ function parseIsoTime(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeDateBoundary(rawValue, boundary) {
+  const value = toTrimmedString(rawValue);
+  if (!value) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+    return `${value}${suffix}`;
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return "";
+  }
+  return new Date(parsed).toISOString();
+}
+
 function hasPostMortemSignal({ content, sourceRefs, labels }) {
   const normalizedContent = toTrimmedString(content).toLowerCase();
   const normalizedSourceRefs = toStringArray(sourceRefs).map((value) => value.toLowerCase());
@@ -261,6 +279,8 @@ function validateGetQuery(query) {
   const lessonCategory = toTrimmedString(query?.lessonCategory).toLowerCase();
   const label = toTrimmedString(query?.label).toLowerCase();
   const searchQuery = toTrimmedString(query?.searchQuery);
+  const dateFromRaw = toTrimmedString(query?.dateFrom);
+  const dateToRaw = toTrimmedString(query?.dateTo);
   const limitRaw = toTrimmedString(query?.limit);
 
   if (!projectId) {
@@ -284,6 +304,18 @@ function validateGetQuery(query) {
     limit = parsed;
   }
 
+  const dateFrom = normalizeDateBoundary(dateFromRaw, "start");
+  const dateTo = normalizeDateBoundary(dateToRaw, "end");
+  if (dateFromRaw && !dateFrom) {
+    return { ok: false, status: 400, error: "dateFrom must be a valid date or ISO timestamp" };
+  }
+  if (dateToRaw && !dateTo) {
+    return { ok: false, status: 400, error: "dateTo must be a valid date or ISO timestamp" };
+  }
+  if (dateFrom && dateTo && Date.parse(dateFrom) > Date.parse(dateTo)) {
+    return { ok: false, status: 400, error: "dateFrom must be lower or equal to dateTo" };
+  }
+
   return {
     ok: true,
     value: {
@@ -294,6 +326,8 @@ function validateGetQuery(query) {
       lessonCategory,
       label,
       searchQuery,
+      dateFrom,
+      dateTo,
       limit,
     },
   };
@@ -691,6 +725,8 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
         agentId: filters.agentId,
         lessonCategory: filters.lessonCategory,
         searchQuery: filters.searchQuery,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
         limit: filters.limit,
       });
 

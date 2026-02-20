@@ -63,6 +63,13 @@ curl -X POST http://127.0.0.1:3022/api/memory/retrieve \
   }'
 ```
 
+List memory with project/date filters:
+```bash
+curl "http://127.0.0.1:3022/api/memory?projectId=all&dateFrom=2026-02-01&dateTo=2026-02-20&limit=200"
+```
+- `limit` must stay in the API contract range `1..200`.
+- `dateFrom` and `dateTo` accept `YYYY-MM-DD` or ISO timestamp.
+
 Compose ticket/handoff/reference prompt:
 ```bash
 curl -X POST http://127.0.0.1:3022/api/compose/ticket \

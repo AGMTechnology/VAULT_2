@@ -42,6 +42,18 @@
 
         <section class="toolbar">
           <label class="field">
+            <span>Project</span>
+            <select id="filter-project"></select>
+          </label>
+          <label class="field">
+            <span>Date from</span>
+            <input id="filter-date-from" type="date" />
+          </label>
+          <label class="field">
+            <span>Date to</span>
+            <input id="filter-date-to" type="date" />
+          </label>
+          <label class="field">
             <span>Search</span>
             <input id="filter-query" placeholder="Search memory..." />
           </label>
@@ -61,7 +73,10 @@
             <span>Agent</span>
             <select id="filter-agent"></select>
           </label>
+          <button class="secondary-action" id="reset-filters" type="button">Reset filters</button>
         </section>
+
+        <section class="active-filters" id="active-filters"></section>
 
         <section class="status-strip" id="status-strip"></section>
 
