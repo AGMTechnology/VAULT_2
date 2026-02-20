@@ -11,6 +11,13 @@ function readMigration(name) {
   return fs.readFileSync(sqlPath, "utf8");
 }
 
+function listMigrationFiles(suffix) {
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((fileName) => fileName.endsWith(suffix))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 function normalizeFilters(filters = {}) {
   return {
     projectId: filters.projectId ?? "",
@@ -23,12 +30,26 @@ function normalizeFilters(filters = {}) {
   };
 }
 
+function normalizeAuditFilters(filters = {}) {
+  return {
+    projectId: filters.projectId ?? "",
+    ticketId: filters.ticketId ?? "",
+    agentId: filters.agentId ?? "",
+    limit: Number.isInteger(filters.limit) ? filters.limit : 100,
+  };
+}
+
 export function applyMemorySchemaMigration(db) {
-  db.exec(readMigration("0001_memory_schema.up.sql"));
+  for (const migrationFile of listMigrationFiles(".up.sql")) {
+    db.exec(readMigration(migrationFile));
+  }
 }
 
 export function rollbackMemorySchemaMigration(db) {
-  db.exec(readMigration("0001_memory_schema.down.sql"));
+  const downMigrations = listMigrationFiles(".down.sql").reverse();
+  for (const migrationFile of downMigrations) {
+    db.exec(readMigration(migrationFile));
+  }
 }
 
 export function insertMemoryEntry(db, entry) {
@@ -132,6 +153,100 @@ export function queryMemoryEntries(db, rawFilters = {}) {
     lessonCategory: row.lesson_category,
     content: row.content,
     sourceRefs: JSON.parse(row.source_refs),
+    createdAt: row.created_at,
+  }));
+}
+
+export function insertMemoryPushAudit(db, audit) {
+  const createdAt = audit.createdAt ?? new Date().toISOString();
+  const payload = audit.payload ?? {};
+  const stmt = db.prepare(`
+    INSERT INTO memory_push_audit (
+      id,
+      project_id,
+      ticket_id,
+      from_status,
+      to_status,
+      agent_id,
+      memory_entry_id,
+      payload_json,
+      created_at
+    ) VALUES (
+      @id,
+      @projectId,
+      @ticketId,
+      @fromStatus,
+      @toStatus,
+      @agentId,
+      @memoryEntryId,
+      @payloadJson,
+      @createdAt
+    )
+  `);
+
+  stmt.run({
+    id: audit.id,
+    projectId: audit.projectId,
+    ticketId: audit.ticketId,
+    fromStatus: audit.fromStatus,
+    toStatus: audit.toStatus,
+    agentId: audit.agentId,
+    memoryEntryId: audit.memoryEntryId,
+    payloadJson: JSON.stringify(payload),
+    createdAt,
+  });
+}
+
+export function queryMemoryPushAudits(db, rawFilters = {}) {
+  const filters = normalizeAuditFilters(rawFilters);
+  const where = [];
+  const params = {};
+
+  if (filters.projectId) {
+    where.push("project_id = @projectId");
+    params.projectId = filters.projectId;
+  }
+  if (filters.ticketId) {
+    where.push("ticket_id = @ticketId");
+    params.ticketId = filters.ticketId;
+  }
+  if (filters.agentId) {
+    where.push("agent_id = @agentId");
+    params.agentId = filters.agentId;
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const stmt = db.prepare(`
+    SELECT
+      id,
+      project_id,
+      ticket_id,
+      from_status,
+      to_status,
+      agent_id,
+      memory_entry_id,
+      payload_json,
+      created_at
+    FROM memory_push_audit
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT @limit
+  `);
+
+  const rows = stmt.all({
+    ...params,
+    limit: Math.max(1, filters.limit),
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    projectId: row.project_id,
+    ticketId: row.ticket_id,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    agentId: row.agent_id,
+    memoryEntryId: row.memory_entry_id,
+    payload: JSON.parse(row.payload_json),
     createdAt: row.created_at,
   }));
 }

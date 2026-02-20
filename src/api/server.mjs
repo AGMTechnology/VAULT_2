@@ -65,26 +65,50 @@ export async function startMemoryApiServer({
 
       const url = new URL(req.url, "http://localhost");
 
-      if (url.pathname !== "/api/memory") {
-        json(res, 404, { error: "Not found" });
+      if (url.pathname === "/api/memory") {
+        if (req.method === "POST") {
+          const body = await readJson(req);
+          const result = api.postMemory(body);
+          json(res, result.status, result.body);
+          return;
+        }
+
+        if (req.method === "GET") {
+          const query = toQueryObject(url);
+          const result = api.getMemory(query);
+          json(res, result.status, result.body);
+          return;
+        }
+
+        json(res, 405, { error: "Method not allowed" });
         return;
       }
 
-      if (req.method === "POST") {
+      if (url.pathname === "/api/workflow/ticket-finish") {
+        if (req.method !== "POST") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
         const body = await readJson(req);
-        const result = api.postMemory(body);
+        const result = api.postWorkflowTicketFinish(body);
         json(res, result.status, result.body);
         return;
       }
 
-      if (req.method === "GET") {
+      if (url.pathname === "/api/workflow/audit") {
+        if (req.method !== "GET") {
+          json(res, 405, { error: "Method not allowed" });
+          return;
+        }
+
         const query = toQueryObject(url);
-        const result = api.getMemory(query);
+        const result = api.getWorkflowAudit(query);
         json(res, result.status, result.body);
         return;
       }
 
-      json(res, 405, { error: "Method not allowed" });
+      json(res, 404, { error: "Not found" });
     } catch (error) {
       if (error instanceof SyntaxError) {
         json(res, 400, { error: "Invalid JSON body" });

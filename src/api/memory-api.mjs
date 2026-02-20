@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { insertMemoryEntry, queryMemoryEntries } from "./memory-store.mjs";
+import {
+  insertMemoryEntry,
+  insertMemoryPushAudit,
+  queryMemoryEntries,
+  queryMemoryPushAudits,
+} from "./memory-store.mjs";
 
 const ALLOWED_TASK_TYPES = new Set(["dev", "design", "qa", "pm", "other"]);
 const ALLOWED_LESSON_CATEGORIES = new Set(["success", "error", "decision", "constraint"]);
+const ALLOWED_WORKFLOW_END_STATUSES = new Set(["in-review", "done"]);
 
 function toTrimmedString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -105,6 +111,64 @@ function validatePostPayload(payload) {
   };
 }
 
+function validateWorkflowCompletionPayload(payload) {
+  const projectId = toTrimmedString(payload?.projectId);
+  const ticketId = toTrimmedString(payload?.ticketId);
+  const fromStatus = toTrimmedString(payload?.fromStatus);
+  const toStatus = toTrimmedString(payload?.toStatus).toLowerCase();
+  const agentId = toTrimmedString(payload?.agentId);
+  const memoryPayload = payload?.memory;
+  const errors = [];
+  let memoryValidation = null;
+
+  if (!projectId) errors.push("projectId is required");
+  if (!ticketId) errors.push("ticketId is required");
+  if (!fromStatus) errors.push("fromStatus is required");
+  if (!toStatus) errors.push("toStatus is required");
+  if (!agentId) errors.push("agentId is required");
+
+  if (toStatus && !ALLOWED_WORKFLOW_END_STATUSES.has(toStatus)) {
+    errors.push("toStatus must be one of in-review|done");
+  }
+
+  if (!memoryPayload || typeof memoryPayload !== "object" || Array.isArray(memoryPayload)) {
+    errors.push("memory is required");
+  }
+  if (memoryPayload && typeof memoryPayload === "object" && !Array.isArray(memoryPayload)) {
+    memoryValidation = validatePostPayload({
+      ...memoryPayload,
+      projectId,
+      agentId,
+      sourceRefs: toStringArray(memoryPayload.sourceRefs),
+    });
+    if (!memoryValidation.ok) {
+      errors.push(...memoryValidation.errors.map((error) => `memory.${error}`));
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const providedSourceRefs = toStringArray(memoryPayload.sourceRefs);
+  const normalizedMemoryPayload = {
+    ...memoryValidation.value,
+    sourceRefs: unique([ticketId, ...providedSourceRefs]),
+  };
+
+  return {
+    ok: true,
+    value: {
+      projectId,
+      ticketId,
+      fromStatus,
+      toStatus,
+      agentId,
+      memory: normalizedMemoryPayload,
+    },
+  };
+}
+
 function validateGetQuery(query) {
   const projectId = toTrimmedString(query?.projectId);
   const featureScope = toTrimmedString(query?.featureScope);
@@ -146,6 +210,36 @@ function validateGetQuery(query) {
       lessonCategory,
       label,
       searchQuery,
+      limit,
+    },
+  };
+}
+
+function validateWorkflowAuditQuery(query) {
+  const projectId = toTrimmedString(query?.projectId);
+  const ticketId = toTrimmedString(query?.ticketId);
+  const agentId = toTrimmedString(query?.agentId);
+  const limitRaw = toTrimmedString(query?.limit);
+
+  if (!projectId) {
+    return { ok: false, status: 400, error: "projectId is required" };
+  }
+
+  let limit = 100;
+  if (limitRaw) {
+    const parsed = Number.parseInt(limitRaw, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 200) {
+      return { ok: false, status: 400, error: "limit must be an integer between 1 and 200" };
+    }
+    limit = parsed;
+  }
+
+  return {
+    ok: true,
+    value: {
+      projectId,
+      ticketId,
+      agentId,
       limit,
     },
   };
@@ -241,6 +335,126 @@ export function createMemoryApi({ db, projectRegistry = new Set(["vault-2"]) }) 
       if (filters.label) {
         rows = rows.filter((row) => row.labels.includes(filters.label));
       }
+
+      return {
+        status: 200,
+        body: {
+          entries: rows,
+        },
+      };
+    },
+
+    postWorkflowTicketFinish(payload) {
+      const validated = validateWorkflowCompletionPayload(payload);
+      if (!validated.ok) {
+        return {
+          status: 400,
+          body: {
+            error: "Invalid workflow completion payload",
+            details: validated.errors,
+          },
+        };
+      }
+
+      if (!hasProject(normalizedRegistry, validated.value.projectId)) {
+        return {
+          status: 404,
+          body: { error: "Project not found" },
+        };
+      }
+
+      const { projectId, ticketId, fromStatus, toStatus, agentId, memory } = validated.value;
+
+      try {
+        insertMemoryEntry(db, memory);
+
+        const audit = {
+          id: `audit-${randomUUID()}`,
+          projectId,
+          ticketId,
+          fromStatus,
+          toStatus,
+          agentId,
+          memoryEntryId: memory.id,
+          payload: {
+            ticketId,
+            fromStatus,
+            toStatus,
+            memory: {
+              id: memory.id,
+              featureScope: memory.featureScope,
+              taskType: memory.taskType,
+              lessonCategory: memory.lessonCategory,
+              labels: memory.labels,
+              sourceRefs: memory.sourceRefs,
+            },
+          },
+          createdAt: new Date().toISOString(),
+        };
+        insertMemoryPushAudit(db, audit);
+
+        return {
+          status: 201,
+          body: {
+            memoryEntry: {
+              id: memory.id,
+              projectId: memory.projectId,
+              featureScope: memory.featureScope,
+              taskType: memory.taskType,
+              agentId: memory.agentId,
+              lessonCategory: memory.lessonCategory,
+              content: memory.content,
+              sourceRefs: memory.sourceRefs,
+              labels: memory.labels,
+              createdAt: memory.createdAt,
+            },
+            audit: {
+              id: audit.id,
+              projectId: audit.projectId,
+              ticketId: audit.ticketId,
+              fromStatus: audit.fromStatus,
+              toStatus: audit.toStatus,
+              agentId: audit.agentId,
+              memoryEntryId: audit.memoryEntryId,
+              createdAt: audit.createdAt,
+            },
+          },
+        };
+      } catch (error) {
+        if (isDuplicateError(error)) {
+          return {
+            status: 409,
+            body: { error: "Memory entry id already exists" },
+          };
+        }
+
+        throw error;
+      }
+    },
+
+    getWorkflowAudit(query) {
+      const validated = validateWorkflowAuditQuery(query);
+      if (!validated.ok) {
+        return {
+          status: validated.status,
+          body: { error: validated.error },
+        };
+      }
+
+      const filters = validated.value;
+      if (!hasProject(normalizedRegistry, filters.projectId)) {
+        return {
+          status: 404,
+          body: { error: "Project not found" },
+        };
+      }
+
+      const rows = queryMemoryPushAudits(db, {
+        projectId: filters.projectId,
+        ticketId: filters.ticketId,
+        agentId: filters.agentId,
+        limit: filters.limit,
+      });
 
       return {
         status: 200,

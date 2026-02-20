@@ -32,6 +32,8 @@ Memory-first platform for contextual AI memory orchestration.
 - Endpoints:
   - `POST /api/memory` append a memory entry
   - `GET /api/memory` list and filter entries
+  - `POST /api/workflow/ticket-finish` enforce memory push at ticket completion (`in-review`/`done`)
+  - `GET /api/workflow/audit` list memory push audit entries by project/ticket/agent
 - Expected validation codes:
   - `400` invalid payload/query
   - `404` project not found
