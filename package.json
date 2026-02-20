@@ -1,12 +1,13 @@
 {
-  "name": "vault-2",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.8.1"
-  }
+    "name":  "vault-2",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "scripts":  {
+                    "test":  "node --test",
+                    "start:api":  "node src/api/server.mjs"
+                },
+    "dependencies":  {
+                         "better-sqlite3":  "^11.8.1"
+                     }
 }

@@ -26,3 +26,13 @@ Memory-first platform for contextual AI memory orchestration.
 
 ## Commands
 - npm test
+
+## Memory API v1
+- Start server: `npm run start:api`
+- Endpoints:
+  - `POST /api/memory` append a memory entry
+  - `GET /api/memory` list and filter entries
+- Expected validation codes:
+  - `400` invalid payload/query
+  - `404` project not found
+  - `409` duplicate memory entry id
