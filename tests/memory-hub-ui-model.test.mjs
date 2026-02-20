@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyMemoryFilters,
+  buildMemoryEntriesApiUrl,
   deriveMemoryUiState,
   pickSelectedMemoryEntry,
 } from "../src/ui/memory-hub-model.mjs";
@@ -75,4 +76,19 @@ test("pickSelectedMemoryEntry returns selected entry or fallback to first", () =
 
   const none = pickSelectedMemoryEntry([], "mem-1");
   assert.equal(none, null);
+});
+
+test("buildMemoryEntriesApiUrl clamps limit to API contract bounds", () => {
+  assert.equal(
+    buildMemoryEntriesApiUrl("all", { limit: 600 }),
+    "/api/memory?projectId=all&limit=200",
+  );
+  assert.equal(
+    buildMemoryEntriesApiUrl("all", { limit: -300 }),
+    "/api/memory?projectId=all&limit=1",
+  );
+  assert.equal(
+    buildMemoryEntriesApiUrl("", { limit: "invalid" }),
+    "/api/memory?projectId=all&limit=200",
+  );
 });

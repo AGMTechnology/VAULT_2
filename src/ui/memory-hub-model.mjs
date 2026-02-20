@@ -2,6 +2,14 @@ function toLower(value) {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
 
+function toBoundedInteger(value, min, max, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isInteger(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
 function parseLabels(sourceRefs) {
   return (sourceRefs || [])
     .filter((ref) => typeof ref === "string" && ref.startsWith("label:"))
@@ -119,3 +127,12 @@ export function buildMemoryStatusCounts(entries) {
   );
 }
 
+export function buildMemoryEntriesApiUrl(projectId, options = {}) {
+  const normalizedProjectId = String(projectId || "all").trim() || "all";
+  const normalizedLimit = toBoundedInteger(options.limit, 1, 200, 200);
+  const params = new URLSearchParams({
+    projectId: normalizedProjectId,
+    limit: String(normalizedLimit),
+  });
+  return `/api/memory?${params.toString()}`;
+}

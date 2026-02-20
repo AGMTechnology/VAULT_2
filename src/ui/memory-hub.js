@@ -1,5 +1,6 @@
 import {
   applyMemoryFilters,
+  buildMemoryEntriesApiUrl,
   buildMemoryFilterOptions,
   buildMemoryStatusCounts,
   deriveMemoryUiState,
@@ -229,7 +230,7 @@ async function loadMemoryEntries() {
   renderMemoryHub();
 
   try {
-    const response = await fetch(`/api/memory?projectId=${encodeURIComponent(projectId)}&limit=300`);
+    const response = await fetch(buildMemoryEntriesApiUrl(projectId, { limit: 200 }));
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }

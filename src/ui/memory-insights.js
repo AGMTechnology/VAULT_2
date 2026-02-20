@@ -1,4 +1,4 @@
-import { buildMemoryFilterOptions } from "./memory-hub-model.mjs";
+import { buildMemoryEntriesApiUrl, buildMemoryFilterOptions } from "./memory-hub-model.mjs";
 import {
   aggregateMemoryInsights,
   buildMemorySourceLink,
@@ -156,7 +156,7 @@ async function loadEntries() {
   renderMemoryInsights();
 
   try {
-    const response = await fetch(`/api/memory?projectId=${encodeURIComponent(projectId)}&limit=600`);
+    const response = await fetch(buildMemoryEntriesApiUrl(projectId, { limit: 200 }));
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
